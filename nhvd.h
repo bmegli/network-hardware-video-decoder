@@ -14,6 +14,22 @@
 
 #include <stdint.h>
 
+// API compatible with C99 on various platorms
+// Compatible with Unity Native Plugins
+#if defined(__CYGWIN32__)
+    #define NHVD_API __stdcall
+    #define NHVD_EXPORT __declspec(dllexport)
+#elif defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(_WIN64) || defined(WINAPI_FAMILY)
+    #define NHVD_API __stdcall
+    #define NHVD_EXPORT __declspec(dllexport)
+#elif defined(__MACH__) || defined(__ANDROID__) || defined(__linux__)
+    #define NHVD_API
+    #define NHVD_EXPORT
+#else
+    #define NHVD_API
+    #define NHVD_EXPORT
+#endif
+
 extern "C"{
 
 //internal library data
@@ -40,13 +56,13 @@ enum nhvd_retval_enum
 	NHVD_OK=0, //!< succesfull execution
 };
 
-struct nhvd *nhvd_init(const nhvd_net_config *net_config, const nhvd_hw_config *hw_config);
-void nhvd_close(nhvd *n);
+NHVD_EXPORT NHVD_API struct nhvd *nhvd_init(const nhvd_net_config *net_config, const nhvd_hw_config *hw_config);
+NHVD_EXPORT NHVD_API void nhvd_close(nhvd *n);
 
-uint8_t *nhvd_get_frame_begin(nhvd *n, int *w, int *h, int *s);
+NHVD_EXPORT NHVD_API uint8_t *nhvd_get_frame_begin(nhvd *n, int *w, int *h, int *s);
 
 //returns HVE_OK on success, HVE_ERROR on fatal error
-int nhvd_get_frame_end(nhvd *n);
+NHVD_EXPORT NHVD_API int nhvd_get_frame_end(nhvd *n);
 
 }
 
