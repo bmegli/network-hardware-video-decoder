@@ -166,13 +166,17 @@ static nhvd *nhvd_close_and_return_null(nhvd *n)
 
 void nhvd_close(nhvd *n)
 { //free mutex?
+	if(n == NULL)
+		return;
+
 	n->keep_working=false;
 	if(n->network_thread.joinable())
 		n->network_thread.join();
-	
+
 	mlsp_close(n->network_streamer);
 	hvd_close(n->hardware_decoder);
-	
-	av_frame_free(&n->frame);
-}
 
+	av_frame_free(&n->frame);
+
+	delete n;
+}
