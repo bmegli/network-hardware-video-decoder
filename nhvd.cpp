@@ -16,7 +16,7 @@
 // Hardware Video Decoder library
 #include "hvd.h"
 
-#include <thread> 
+#include <thread>
 #include <mutex>
 #include <fstream>
 #include <iostream>
@@ -30,14 +30,14 @@ static nhvd *nhvd_close_and_return_null(nhvd *n);
 struct nhvd
 {
 	mlsp *network_streamer;
-	
-	hvd *hardware_decoder;	
+
+	hvd *hardware_decoder;
 	AVFrame *frame;
 	std::mutex frame_mutex;
 
 	thread network_thread;
 	bool keep_working;
-	
+
 	nhvd(): network_streamer(NULL), hardware_decoder(NULL), frame(NULL), keep_working(true) {}
 };
 
@@ -47,12 +47,12 @@ struct nhvd *nhvd_init(const nhvd_net_config *net_config,const nhvd_hw_config *h
 	hvd_config hvd_cfg={hw_config->hardware, hw_config->codec, hw_config->device, hw_config->pixel_format};
 
 	nhvd *n=new nhvd();
-	
+
 	if(n == NULL)
 	{
 		cerr << "nhvd: not enough memory for nhvd" << endl;
 		return NULL;
-	}	
+	}
 	if( (n->network_streamer = mlsp_init_server(&mlsp_cfg)) == NULL )
 	{
 		cerr << "nhvd: failed to initialize network server" << endl;
@@ -62,13 +62,13 @@ struct nhvd *nhvd_init(const nhvd_net_config *net_config,const nhvd_hw_config *h
 	{
 		cerr << "nhvd: failed to initalize hardware decoder" << endl;
 		return nhvd_close_and_return_null(n);
-	}	
+	}
 	if( (n->frame = av_frame_alloc() ) == NULL)
 	{
 		cerr << "nhvd: not enough memory for video frame" << endl;
 		return nhvd_close_and_return_null(n);
 	}
-	n->frame->data[0]=NULL;		
+	n->frame->data[0]=NULL;
 
 	n->network_thread = thread(nhvd_network_decoder_thread, n);
 
@@ -80,27 +80,27 @@ static void nhvd_network_decoder_thread(nhvd *n)
 	hvd_packet packet={0};
 	mlsp_frame *streamer_frame;
 	int error;
-		
+
     while(n->keep_working)
-    { 
+    {
 		streamer_frame = mlsp_receive(n->network_streamer, &error);
-		
+
 		if(streamer_frame == NULL)
 		{
 			if(error==MLSP_TIMEOUT)
 			{
-				cout << "." << endl;			
+				cout << "." << endl;
 				mlsp_receive_reset(n->network_streamer);
 				continue;
 			}
 			cerr << "nhvd: error while receiving frame" << endl;
-			break;				
+			break;
 		}
-              
+
 		cout << "collected frame " << streamer_frame->framenumber;
 		packet.data=streamer_frame->data;
 		packet.size=streamer_frame->size;
-		
+
 		if (nhvd_decode_frame(n, &packet) != NHVD_OK)
 			break;
     }
@@ -119,14 +119,14 @@ static int nhvd_decode_frame(nhvd *n, hvd_packet* packet)
 		cerr << "hvd: error during decoding" << endl;
 		return NHVD_ERROR; //fail actually?
 	}
-	
+
 	while( (frame = hvd_receive_frame(n->hardware_decoder, &error) ) != NULL )
 	{
 		std::lock_guard<std::mutex> frame_guard(n->frame_mutex);
 		av_frame_unref(n->frame);
 		av_frame_ref(n->frame, frame);
 	}
-	
+
 	if(error != HVD_OK)
 	{
 		cerr << "nhvd: error after decoding"<< endl;
@@ -140,19 +140,21 @@ uint8_t *nhvd_get_frame_begin(nhvd *n, int *w, int *h, int *s)
 {
 	if(n == NULL)
 		return NULL;
-	
+
 	n->frame_mutex.lock();
-	
+
 	*w=n->frame->width;
 	*h=n->frame->height;
 	*s=n->frame->linesize[0];
-	return n->frame->data[0];	
+	return n->frame->data[0];
 }
 
 int nhvd_get_frame_end(struct nhvd *n)
 {
 	if(n == NULL)
 		return NHVD_ERROR;
+
+	av_frame_unref(n->frame);
 
 	n->frame_mutex.unlock();
 	return NHVD_OK;
