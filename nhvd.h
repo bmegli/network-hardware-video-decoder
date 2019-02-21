@@ -8,7 +8,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  *
  */
- 
+
 #ifndef NHVD_H
 #define NHVD_H
 
@@ -34,7 +34,7 @@ extern "C"{
 
 //internal library data
 struct nhvd;
-	
+
 struct nhvd_hw_config
 {
 	const char *hardware; //!< hardware type for decoding, e.g. "vaapi"
@@ -45,20 +45,22 @@ struct nhvd_hw_config
 
 struct nhvd_net_config
 {
-	const char *ip; // IP (to listen on) or NULL (listen on any)
-	uint16_t port; // server port
-	int timeout_ms; //0 ar positive number
+	const char *ip; //!< IP (to listen on) or NULL (listen on any)
+	uint16_t port; //!< server port
+	int timeout_ms; //!< 0 ar positive number
 };
 
 enum nhvd_retval_enum
 {
-	NHVD_ERROR=-1, //!< error occured 
+	NHVD_ERROR=-1, //!< error occured
 	NHVD_OK=0, //!< succesfull execution
 };
 
+//NULL on failure, NON null on success
 NHVD_EXPORT NHVD_API struct nhvd *nhvd_init(const nhvd_net_config *net_config, const nhvd_hw_config *hw_config);
 NHVD_EXPORT NHVD_API void nhvd_close(nhvd *n);
 
+//NULL if there is no fresh data, non NULL otherwise
 NHVD_EXPORT NHVD_API uint8_t *nhvd_get_frame_begin(nhvd *n, int *w, int *h, int *s);
 
 //returns HVE_OK on success, HVE_ERROR on fatal error
