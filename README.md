@@ -59,7 +59,7 @@ sudo apt-get install git
 # clone the repository with *RECURSIVE* for submodules
 git clone --recursive https://github.com/bmegli/network-hardware-video-decoder.git
 
-# finally build the library
+# finally build the shared library
 cd network-hardware-video-decoder
 mkdir build
 cd build
@@ -68,6 +68,8 @@ make
 ```
 
 ## Using
+
+See [HVD](https://github.com/bmegli/hardware-video-decoder) docs for details about hardware configuration.
 
 ```C++
 	nhvd_hw_config hw_config= {"vaapi", "h264", "/dev/dri/renderD128", "bgr0"};
