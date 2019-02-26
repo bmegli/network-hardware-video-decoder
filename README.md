@@ -76,23 +76,28 @@ See [HVD](https://github.com/bmegli/hardware-video-decoder) docs for details abo
 	nhvd_net_config net_config= {NULL, 9765, 500};
 
 	nhvd *network_decoder=nhvd_init(&net_config, &hw_config);
-		
-	uint8_t *data;
-	int width, height, linesize;
+
+	//this is where we will get the decoded data	
+	nhvd_frame frame;
 	
 	while(keep_working)
 	{
-		data = nhvd_get_frame_begin(network_decoder, &width, &height, &linesize);
-		
-		if(data != NULL)
+		if( nhvd_get_frame(network_decoder, &frame) == NHVD_OK )
 		{
 			//...
-			//do something with the data, be quick - we are holding the mutex
+			//do something with the:
+			// - frame.width
+			// - frame.height
+			// - frame.format
+			// - frame.data
+			// - frame.linesize
+			// be quick - we are holding the mutex
 			// Examples:
 			// - fill the texture
 			// - copy for later use if you can't be quick
 			//...
 		}
+
 		if( nhvd_get_frame_end(network_decoder) != NHVD_OK )
 			break; //error occured
 

@@ -81,8 +81,8 @@ static void nhvd_network_decoder_thread(nhvd *n)
 	mlsp_frame *streamer_frame;
 	int error;
 
-    while(n->keep_working)
-    {
+	while(n->keep_working)
+	{
 		streamer_frame = mlsp_receive(n->network_streamer, &error);
 
 		if(streamer_frame == NULL)
@@ -103,7 +103,7 @@ static void nhvd_network_decoder_thread(nhvd *n)
 
 		if (nhvd_decode_frame(n, &packet) != NHVD_OK)
 			break;
-    }
+	}
 
 	//flush the decoder
 	cerr << "nhvd: network decoder thread finished" << endl;
@@ -112,7 +112,7 @@ static void nhvd_network_decoder_thread(nhvd *n)
 static int nhvd_decode_frame(nhvd *n, hvd_packet* packet)
 {
 	AVFrame *frame = NULL;
-    int error = 0;
+	int error = 0;
 
 	if(hvd_send_packet(n->hardware_decoder, packet) != HVD_OK)
 	{
@@ -136,17 +136,26 @@ static int nhvd_decode_frame(nhvd *n, hvd_packet* packet)
 	return NHVD_OK;
 }
 
-uint8_t *nhvd_get_frame_begin(nhvd *n, int *w, int *h, int *s)
+int nhvd_get_frame_begin(nhvd *n, nhvd_frame *frame)
 {
 	if(n == NULL)
-		return NULL;
+		return NHVD_ERROR;
 
 	n->frame_mutex.lock();
 
-	*w=n->frame->width;
-	*h=n->frame->height;
-	*s=n->frame->linesize[0];
-	return n->frame->data[0];
+	//for user convinience, return ERROR if there is no data
+	if(n->frame->data[0] == NULL)
+		return NHVD_ERROR;
+
+	frame->width = n->frame->width;
+	frame->height = n->frame->height;
+	frame->format = n->frame->format;
+
+	//copy just a few ints and pointers, not the actual data
+	memcpy(frame->linesize, n->frame->linesize, sizeof(frame->linesize));
+	memcpy(frame->data, n->frame->data, sizeof(frame->data));
+
+	return NHVD_OK;
 }
 
 int nhvd_get_frame_end(struct nhvd *n)

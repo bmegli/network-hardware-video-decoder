@@ -50,6 +50,17 @@ struct nhvd_net_config
 	int timeout_ms; //!< 0 ar positive number
 };
 
+enum {NHVD_NUM_DATA_POINTERS = 3};
+
+struct nhvd_frame
+{
+	int width;
+	int height;
+	int format;
+	uint8_t *data[NHVD_NUM_DATA_POINTERS]; //!< array of pointers to frame planes (e.g. Y plane and UV plane)
+	int linesize[NHVD_NUM_DATA_POINTERS];
+};
+
 enum nhvd_retval_enum
 {
 	NHVD_ERROR=-1, //!< error occured
@@ -61,7 +72,7 @@ NHVD_EXPORT NHVD_API struct nhvd *nhvd_init(const nhvd_net_config *net_config, c
 NHVD_EXPORT NHVD_API void nhvd_close(nhvd *n);
 
 //NULL if there is no fresh data, non NULL otherwise
-NHVD_EXPORT NHVD_API uint8_t *nhvd_get_frame_begin(nhvd *n, int *w, int *h, int *s);
+NHVD_EXPORT NHVD_API int nhvd_get_frame_begin(nhvd *n, nhvd_frame *frame);
 
 //returns HVE_OK on success, HVE_ERROR on fatal error
 NHVD_EXPORT NHVD_API int nhvd_get_frame_end(nhvd *n);
