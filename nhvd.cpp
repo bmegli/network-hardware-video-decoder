@@ -21,6 +21,51 @@
 #include <fstream>
 #include <iostream>
 
+//temp
+#include <android/log.h>
+#include <unistd.h> //read
+
+static int pfd[2];
+static pthread_t thr;
+static const char *tag = "myapp";
+//
+
+static void *thread_func(void*)
+{
+    ssize_t rdsz;
+    char buf[128];
+    while((rdsz = read(pfd[0], buf, sizeof buf - 1)) > 0) {
+        if(buf[rdsz - 1] == '\n') --rdsz;
+        buf[rdsz] = 0;  /* add null-terminator */
+        __android_log_write(ANDROID_LOG_DEBUG, tag, buf);
+    }
+    return 0;
+}
+
+
+int start_logger(const char *app_name)
+{
+    tag = app_name;
+
+    /* make stdout line-buffered and stderr unbuffered */
+    setvbuf(stdout, 0, _IOLBF, 0);
+    setvbuf(stderr, 0, _IONBF, 0);
+
+    /* create the pipe and redirect stdout and stderr */
+    pipe(pfd);
+    dup2(pfd[1], 1);
+    dup2(pfd[1], 2);
+
+    /* spawn the logging thread */
+    if(pthread_create(&thr, 0, thread_func, 0) == -1)
+        return -1;
+    pthread_detach(thr);
+    return 0;
+}
+
+
+// end temp
+
 using namespace std;
 
 static void nhvd_network_decoder_thread(nhvd *n);
@@ -45,6 +90,8 @@ struct nhvd *nhvd_init(const nhvd_net_config *net_config,const nhvd_hw_config *h
 {
 	mlsp_config mlsp_cfg={net_config->ip, net_config->port, net_config->timeout_ms};
 	hvd_config hvd_cfg={hw_config->hardware, hw_config->codec, hw_config->device, hw_config->pixel_format};
+
+	start_logger("NHVD");
 
 	nhvd *n=new nhvd();
 
@@ -136,17 +183,26 @@ static int nhvd_decode_frame(nhvd *n, hvd_packet* packet)
 	return NHVD_OK;
 }
 
-uint8_t *nhvd_get_frame_begin(nhvd *n, int *w, int *h, int *s)
+int nhvd_get_frame_begin(nhvd *n, nhvd_frame *frame)
 {
 	if(n == NULL)
-		return NULL;
+		return NHVD_ERROR;
 
 	n->frame_mutex.lock();
 
-	*w=n->frame->width;
-	*h=n->frame->height;
-	*s=n->frame->linesize[0];
-	return n->frame->data[0];
+	//for user convinience, return ERROR if there is no data
+	if(n->frame->data[0] == NULL)
+		return NHVD_ERROR;
+
+	frame->width = n->frame->width;
+	frame->height = n->frame->height;
+	frame->format = n->frame->format;
+	
+	//copy just a few ints and pointers, not the actual data
+	memcpy(frame->linesize, n->frame->linesize, sizeof(frame->linesize));
+	memcpy(frame->data, n->frame->data, sizeof(frame->data));
+	
+	return NHVD_OK;
 }
 
 int nhvd_get_frame_end(struct nhvd *n)
