@@ -1,0 +1,2 @@
+export PATH=$PATH:/home/meglickib/android_sdk/platform-tools
+#adb logcat -s Unity ActivityManager PackageManager dalvikvm DEBUG
