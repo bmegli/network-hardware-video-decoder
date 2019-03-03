@@ -24,6 +24,14 @@ include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 
+# avformat
+
+LOCAL_MODULE := avformat
+LOCAL_SRC_FILES := libavformat.so
+LOCAL_EXPORT_C_INCLUDES := /data/meglickib/android-ndk/android-ndk-r13b/sources/FFmpeg/android/arm/include
+include $(PREBUILT_SHARED_LIBRARY)
+
+include $(CLEAR_VARS)
 
 ## FFmpeg
 LOCAL_C_INCLUDES := /data/meglickib/android-ndk/android-ndk-r13b/sources/FFmpeg/android/arm/include
@@ -45,7 +53,7 @@ LOCAL_C_INCLUDES += $(SRC_DIR) \
 
 LOCAL_ARM_MODE := arm
 LOCAL_SRC_FILES +=  $(SRC_DIR)/nhvd.cpp
-LOCAL_SHARED_LIBRARIES += avcodec avutil
+LOCAL_SHARED_LIBRARIES += avcodec avutil avformat
 LOCAL_LDLIBS := -llog
 
 # build
