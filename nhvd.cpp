@@ -85,8 +85,11 @@ static void nhvd_network_decoder_thread(nhvd *n)
 	int error;
 
 	//dummy
-	int FRAMERATE=24;
-	const useconds_t useconds_per_frame = 1000000/FRAMERATE;
+	int FRAMERATE=48;
+	//const useconds_t useconds_per_frame = 1000000/FRAMERATE;
+
+	
+	const useconds_t useconds_per_frame =  10 * 1000;
 
 	while(n->keep_working)
 	{
