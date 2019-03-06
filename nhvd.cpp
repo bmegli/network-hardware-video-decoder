@@ -93,7 +93,6 @@ static void nhvd_network_decoder_thread(nhvd *n)
 
 	while(n->keep_working)
 	{
-		/*
 		streamer_frame = mlsp_receive(n->network_streamer, &error);
 
 		if(streamer_frame == NULL)
@@ -111,11 +110,9 @@ static void nhvd_network_decoder_thread(nhvd *n)
 		cout << "collected frame " << streamer_frame->framenumber;
 		packet.data=streamer_frame->data;
 		packet.size=streamer_frame->size;
-		*/
+		
 		if (nhvd_decode_frame(n, &packet) != NHVD_OK)
 			break;
-
-		usleep(useconds_per_frame);
 	}
 
 	//flush the decoder
