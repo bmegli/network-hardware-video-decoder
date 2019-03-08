@@ -115,7 +115,11 @@ static void nhvd_network_decoder_thread(nhvd *n)
 			break;
 	}
 
-	//flush the decoder
+	nhvd_decode_frame(n, NULL);
+
+	hvd_close(n->hardware_decoder);
+	n->hardware_decoder = NULL;
+
 	cerr << "nhvd: network decoder thread finished" << endl;
 }
 
@@ -195,9 +199,9 @@ void nhvd_close(nhvd *n)
 		n->network_thread.join();
 
 	mlsp_close(n->network_streamer);
-	hvd_close(n->hardware_decoder);
 
 	av_frame_free(&n->frame);
+	hvd_close(n->hardware_decoder);
 
 	delete n;
 }
