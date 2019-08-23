@@ -13,6 +13,7 @@
 #define NHVD_H
 
 #include <stdint.h>
+#include "Unity/IUnityRenderingExtensions.h"
 
 // API compatible with C99 on various platorms
 // Compatible with Unity Native Plugins
@@ -76,6 +77,8 @@ NHVD_EXPORT NHVD_API int nhvd_get_frame_begin(nhvd *n, nhvd_frame *frame);
 
 //returns HVE_OK on success, HVE_ERROR on fatal error
 NHVD_EXPORT NHVD_API int nhvd_get_frame_end(nhvd *n);
+
+UnityRenderingEventAndData UNITY_INTERFACE_EXPORT GetUnityTextureUpdateCallback();
 
 }
 

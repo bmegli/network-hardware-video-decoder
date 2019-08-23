@@ -41,6 +41,8 @@ struct nhvd
 	nhvd(): network_streamer(NULL), hardware_decoder(NULL), frame(NULL), keep_working(true) {}
 };
 
+struct nhvd *g_nhvd = NULL; //temp
+
 struct nhvd *nhvd_init(const nhvd_net_config *net_config,const nhvd_hw_config *hw_config)
 {
 	mlsp_config mlsp_cfg={net_config->ip, net_config->port, net_config->timeout_ms};
@@ -71,6 +73,8 @@ struct nhvd *nhvd_init(const nhvd_net_config *net_config,const nhvd_hw_config *h
 	n->frame->data[0]=NULL;
 
 	n->network_thread = thread(nhvd_network_decoder_thread, n);
+
+	g_nhvd = n; //temp
 
 	return n;
 }
@@ -146,7 +150,7 @@ int nhvd_get_frame_begin(nhvd *n, nhvd_frame *frame)
 	//for user convinience, return ERROR if there is no data
 	if(n->frame->data[0] == NULL)
 		return NHVD_ERROR;
-
+	
 	frame->width = n->frame->width;
 	frame->height = n->frame->height;
 	frame->format = n->frame->format;
@@ -190,4 +194,43 @@ void nhvd_close(nhvd *n)
 	av_frame_free(&n->frame);
 
 	delete n;
+}
+
+
+//temp
+uint32_t *g_img=NULL;
+uint32_t g_counter=0;
+nhvd_frame g_frame;
+
+ void UnityTextureUpdateCallback(int eventID, void* data)
+ {
+	  UnityRenderingExtEventType event = (UnityRenderingExtEventType)eventID;
+
+	  if (event == kUnityRenderingExtEventUpdateTextureBeginV2)
+	  {
+		  if(!g_nhvd)
+			  return;
+			  	  				  
+			UnityRenderingExtTextureUpdateParamsV2* params = (UnityRenderingExtTextureUpdateParamsV2*)data;
+									
+			if( nhvd_get_frame_begin(g_nhvd, &g_frame) != NHVD_OK )
+				params->texData = NULL; //there is no documentation in Unity for behaviour, assuming that returning NULL is handled by Unity (as no texture data to update)
+			else //resolution and everything has to match, check here!
+				params->texData = g_frame.data[0];
+	  }
+	  else if (event == kUnityRenderingExtEventUpdateTextureEndV2)
+	  {
+		  if(!g_nhvd)
+			  return;
+	
+        UnityRenderingExtTextureUpdateParamsV2* params = (UnityRenderingExtTextureUpdateParamsV2*)data;
+		  
+		  nhvd_get_frame_end(g_nhvd);
+	  }
+ 
+}
+
+UnityRenderingEventAndData UNITY_INTERFACE_EXPORT GetUnityTextureUpdateCallback()
+{
+    return UnityTextureUpdateCallback;
 }
