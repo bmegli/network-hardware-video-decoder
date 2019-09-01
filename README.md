@@ -1,7 +1,10 @@
 # NHVD Network Hardware Video Decoder C++ library
 
 Library for hardware video decoding from custom [MLSP](https://github.com/bmegli/minimal-latency-streaming-protocol) network protocol.
+
 See also twin [NHVE](https://github.com/bmegli/network-hardware-video-encoder) network encoder.
+
+See [hardware-video-streaming](https://github.com/bmegli/hardware-video-streaming) for other related projects.
 
 The intent behind library:
 - minimize video latency
