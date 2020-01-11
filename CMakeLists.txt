@@ -19,4 +19,7 @@ target_include_directories(nhvd PRIVATE minimal-latency-streaming-protocol)
 # note that nhvd depends through hvd on FFMpeg avcodec and avutil, at least 3.4 version
 target_link_libraries(nhvd hvd mlsp avcodec avutil)
 
+add_executable(nhvd-receive-example examples/nhvd_receive_example.cpp)
+target_link_libraries(nhvd-receive-example nhvd)
+
 

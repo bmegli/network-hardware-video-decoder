@@ -74,6 +74,8 @@ make
 
 See [HVD](https://github.com/bmegli/hardware-video-decoder) docs for details about hardware configuration.
 
+See examples directory for a more complete example.
+
 ```C++
 	nhvd_hw_config hw_config= {"vaapi", "h264", "/dev/dri/renderD128", "bgr0"};
 	nhvd_net_config net_config= {NULL, 9765, 500};
@@ -85,7 +87,7 @@ See [HVD](https://github.com/bmegli/hardware-video-decoder) docs for details abo
 	
 	while(keep_working)
 	{
-		if( nhvd_get_frame(network_decoder, &frame) == NHVD_OK )
+		if( nhvd_get_frame_begin(network_decoder, &frame) == NHVD_OK )
 		{
 			//...
 			//do something with the:
@@ -107,9 +109,45 @@ See [HVD](https://github.com/bmegli/hardware-video-decoder) docs for details abo
 		//this should spin once per frame rendering
 		//so wait until we are after rendering
 	}
-	 	
+
 	nhvd_close(network_decoder);
 ```
+
+## Testing
+
+Assuming:
+- you are using VAAPI device "/dev/dri/renderD128"
+- port is 9766
+- codec is h264
+
+### Receiving side
+
+```bash
+./nhvd-receive-example 9766 vaapi h264 /dev/dri/renderD128
+```
+
+### Sending side
+
+For a quick test you may use [NHVE](https://github.com/bmegli/network-hardware-video-encoder) procedurally generated H.264 video (recommended).
+
+```bash
+# assuming you build NHVE, in build directory
+./nhve-stream-h264 127.0.0.1 9766 10 /dev/dri/renderD128
+```
+
+If you have Realsense camera you may use [realsense-network-hardware-video-encoder](https://github.com/bmegli/realsense-network-hardware-video-encoder).
+
+```bash
+# assuming you build RNHVE, in build directory
+./realsense-nhve-h264 127.0.0.1 9766 color 640 360 30 10 /dev/dri/renderD128
+```
+
+If everything went well you will:
+- see hardware initialized
+- collected frames info
+- decoded frames size
+
+If you have multiple vaapi devices you may have to specify correct one e.g. "/dev/dri/renderD129"
 
 ## License
 
@@ -134,4 +172,3 @@ Hardware decode & render in Unity from H.264 network stream [unity-network-hardw
 
 You may stream Realsense camera data (sending side) from [realsense-network-hardware-video-encoder
 ](https://github.com/bmegli/realsense-network-hardware-video-encoder)
-
