@@ -76,11 +76,12 @@ Assuming:
 - you are using VAAPI device "/dev/dri/renderD128"
 - port is 9766
 - codec is h264
+- pixel format is nv12
 
 ### Receiving side
 
 ```bash
-./nhvd-receive-example 9766 vaapi h264 /dev/dri/renderD128
+./nhvd-receive-example 9766 vaapi h264 nv12 /dev/dri/renderD128
 ```
 
 ### Sending side

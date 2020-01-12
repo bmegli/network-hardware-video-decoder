@@ -28,10 +28,9 @@ int process_user_input(int argc, char **argv, nhvd_hw_config *hw_config, nhvd_ne
 const char *HARDWARE=NULL; //input through CLI, e.g. "vaapi"
 const char *CODEC=NULL;  //input through CLI, e.g. "h264"
 const char *DEVICE=NULL; //optionally input through CLI, e.g. "/dev/dri/renderD128"
-const char *PIXEL_FORMAT="bgr0"; //NULL for default (NV12) or pixel format e.g. "rgb0"
+const char *PIXEL_FORMAT=NULL; //input through CLI, NULL for default (NV12) or pixel format e.g. "rgb0"
 //the pixel format that you want to receive data in
 //this has to be supported by hardware
-//here "bgr0" for easy integration with Unity
 const int WIDTH=0; //0 to not specify, needed by some codecs
 const int HEIGHT=0; //0 to not specify, needed by some codecs
 const int PROFILE=0; //0 to leave as FF_PROFILE_UNKNOWN
@@ -93,7 +92,8 @@ void main_loop(nhvd *network_decoder)
 			// - copy for later use if you can't be quick
 			//...
 
-			cout << endl << "decoded frame " << frame.width << "x" << frame.height << endl;
+			cout << endl << "decoded frame " << frame.width << "x" << frame.height <<
+			" ls[0] " << frame.linesize[0] << " ls[1] " << frame.linesize[1]  << " ls[2]" << frame.linesize[2] << endl;
 		}
 
 		if( nhvd_get_frame_end(network_decoder) != NHVD_OK )
@@ -107,19 +107,20 @@ void main_loop(nhvd *network_decoder)
 
 int process_user_input(int argc, char **argv, nhvd_hw_config *hw_config, nhvd_net_config *net_config)
 {
-	if(argc < 4)
+	if(argc < 5)
 	{
-		fprintf(stderr, "Usage: %s <port> <hardware> <codec> [device] [width] [height] [profile]\n\n", argv[0]);
+		fprintf(stderr, "Usage: %s <port> <hardware> <codec> <pixel format> [device] [width] [height] [profile]\n\n", argv[0]);
 		fprintf(stderr, "examples: \n");
-		fprintf(stderr, "%s 9766 vaapi h264 \n", argv[0]);
-		fprintf(stderr, "%s 9766 vdpau h264 \n", argv[0]);
-		fprintf(stderr, "%s 9766 vaapi h264 /dev/dri/renderD128\n", argv[0]);
-		fprintf(stderr, "%s 9766 vaapi h264 /dev/dri/renderD129\n", argv[0]);
-		fprintf(stderr, "%s 9766 dxva2 h264 \n", argv[0]);
-		fprintf(stderr, "%s 9766 d3d11va h264 \n", argv[0]);
-		fprintf(stderr, "%s 9766 videotoolbox h264 \n", argv[0]);
-		fprintf(stderr, "%s 9766 vaapi hevc /dev/dri/renderD128 640 360 1\n", argv[0]);
-		fprintf(stderr, "%s 9766 vaapi hevc /dev/dri/renderD128 848 480 2\n", argv[0]);
+		fprintf(stderr, "%s 9766 vaapi h264 bgr0 \n", argv[0]);
+		fprintf(stderr, "%s 9766 vaapi h264 nv12 \n", argv[0]);
+		fprintf(stderr, "%s 9766 vdpau h264 yuv420p \n", argv[0]);
+		fprintf(stderr, "%s 9766 vaapi h264 bgr0 /dev/dri/renderD128\n", argv[0]);
+		fprintf(stderr, "%s 9766 vaapi h264 nv12 /dev/dri/renderD129\n", argv[0]);
+		fprintf(stderr, "%s 9766 dxva2 h264 nv12 \n", argv[0]);
+		fprintf(stderr, "%s 9766 d3d11va h264 nv12 \n", argv[0]);
+		fprintf(stderr, "%s 9766 videotoolbox h264 nv12 \n", argv[0]);
+		fprintf(stderr, "%s 9766 vaapi hevc nv12 /dev/dri/renderD128 640 360 1\n", argv[0]);
+		fprintf(stderr, "%s 9766 vaapi hevc p010le /dev/dri/renderD128 848 480 2\n", argv[0]);
 
 		return 1;
 	}
@@ -127,11 +128,12 @@ int process_user_input(int argc, char **argv, nhvd_hw_config *hw_config, nhvd_ne
 	net_config->port = atoi(argv[1]);
 	hw_config->hardware = argv[2];
 	hw_config->codec = argv[3];
-	hw_config->device = argv[4]; //NULL or device, both are ok
+	hw_config->pixel_format = argv[4];
+	hw_config->device = argv[5]; //NULL or device, both are ok
 
-	if(argc >= 6) hw_config->width = atoi(argv[5]);
-	if(argc >= 7) hw_config->height = atoi(argv[6]);
-	if(argc >= 8) hw_config->profile = atoi(argv[7]);
+	if(argc >= 6) hw_config->width = atoi(argv[6]);
+	if(argc >= 7) hw_config->height = atoi(argv[7]);
+	if(argc >= 8) hw_config->profile = atoi(argv[8]);
 
 	return 0;
 }
