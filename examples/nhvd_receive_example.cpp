@@ -32,6 +32,11 @@ const char *PIXEL_FORMAT="bgr0"; //NULL for default (NV12) or pixel format e.g. 
 //the pixel format that you want to receive data in
 //this has to be supported by hardware
 //here "bgr0" for easy integration with Unity
+const int WIDTH=0; //0 to not specify, needed by some codecs
+const int HEIGHT=0; //0 to not specify, needed by some codecs
+const int PROFILE=0; //0 to leave as FF_PROFILE_UNKNOWN
+//for list of profiles see:
+//https://ffmpeg.org/doxygen/3.4/avcodec_8h.html#ab424d258655424e4b1690e2ab6fcfc66
 
 //network configuration
 const char *IP=NULL; //listen on or NULL (listen on any)
@@ -44,7 +49,7 @@ const int SLEEP_US = 1000000/30;
 
 int main(int argc, char **argv)
 {
-	nhvd_hw_config hw_config= {HARDWARE, CODEC, DEVICE, PIXEL_FORMAT};
+	nhvd_hw_config hw_config= {HARDWARE, CODEC, DEVICE, PIXEL_FORMAT, WIDTH, HEIGHT, PROFILE};
 	nhvd_net_config net_config= {IP, PORT, TIMEOUT_MS};
 
 	if(process_user_input(argc, argv, &hw_config, &net_config) != 0)
@@ -104,7 +109,7 @@ int process_user_input(int argc, char **argv, nhvd_hw_config *hw_config, nhvd_ne
 {
 	if(argc < 4)
 	{
-		fprintf(stderr, "Usage: %s <port> <hardware> <codec> [device]\n\n", argv[0]);
+		fprintf(stderr, "Usage: %s <port> <hardware> <codec> [device] [width] [height] [profile]\n\n", argv[0]);
 		fprintf(stderr, "examples: \n");
 		fprintf(stderr, "%s 9766 vaapi h264 \n", argv[0]);
 		fprintf(stderr, "%s 9766 vdpau h264 \n", argv[0]);
@@ -113,6 +118,9 @@ int process_user_input(int argc, char **argv, nhvd_hw_config *hw_config, nhvd_ne
 		fprintf(stderr, "%s 9766 dxva2 h264 \n", argv[0]);
 		fprintf(stderr, "%s 9766 d3d11va h264 \n", argv[0]);
 		fprintf(stderr, "%s 9766 videotoolbox h264 \n", argv[0]);
+		fprintf(stderr, "%s 9766 vaapi hevc /dev/dri/renderD128 640 360 1\n", argv[0]);
+		fprintf(stderr, "%s 9766 vaapi hevc /dev/dri/renderD128 848 480 2\n", argv[0]);
+
 		return 1;
 	}
 
@@ -120,6 +128,10 @@ int process_user_input(int argc, char **argv, nhvd_hw_config *hw_config, nhvd_ne
 	hw_config->hardware = argv[2];
 	hw_config->codec = argv[3];
 	hw_config->device = argv[4]; //NULL or device, both are ok
+
+	if(argc >= 6) hw_config->width = atoi(argv[5]);
+	if(argc >= 7) hw_config->height = atoi(argv[6]);
+	if(argc >= 8) hw_config->profile = atoi(argv[7]);
 
 	return 0;
 }

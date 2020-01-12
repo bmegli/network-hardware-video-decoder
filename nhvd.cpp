@@ -44,7 +44,8 @@ struct nhvd
 struct nhvd *nhvd_init(const nhvd_net_config *net_config,const nhvd_hw_config *hw_config)
 {
 	mlsp_config mlsp_cfg={net_config->ip, net_config->port, net_config->timeout_ms};
-	hvd_config hvd_cfg={hw_config->hardware, hw_config->codec, hw_config->device, hw_config->pixel_format};
+	hvd_config hvd_cfg={hw_config->hardware, hw_config->codec, hw_config->device,
+		hw_config->pixel_format, hw_config->width, hw_config->height, hw_config->profile};
 
 	nhvd *n=new nhvd();
 

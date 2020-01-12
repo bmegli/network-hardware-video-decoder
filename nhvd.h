@@ -41,6 +41,9 @@ struct nhvd_hw_config
 	const char *codec; //!< codec name, e.g. "h264", "vp8"
 	const char *device; //!< NULL/empty string or device, e.g. "/dev/dri/renderD128"
 	const char *pixel_format; //!< NULL for default or format, e.g. "rgb0", "bgr0", "nv12", "yuv420p"
+	int width; //!< 0 to not specify, needed by some codecs
+	int height; //!< 0 to not specify, needed by some codecs
+	int profile; //!< 0 to leave as FF_PROFILE_UNKNOWN or profile e.g. FF_PROFILE_HEVC_MAIN, ...
 };
 
 struct nhvd_net_config
