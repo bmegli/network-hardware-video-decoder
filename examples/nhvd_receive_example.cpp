@@ -46,6 +46,7 @@ const int TIMEOUT_MS=500; //timeout, accept new streaming sequence by receiver
 const int FRAMERATE = 30;
 const int SLEEP_US = 1000000/30;
 
+
 int main(int argc, char **argv)
 {
 	nhvd_hw_config hw_config= {HARDWARE, CODEC, DEVICE, PIXEL_FORMAT, WIDTH, HEIGHT, PROFILE};
@@ -72,30 +73,26 @@ void main_loop(nhvd *network_decoder)
 {
 	//this is where we will get the decoded data
 	nhvd_frame frame;
+	nhvd_point_cloud cloud;
 
 	bool keep_working=true;
 
 	while(keep_working)
 	{
-		if( nhvd_get_frame_begin(network_decoder, &frame) == NHVD_OK )
+		//add mechanism to prevent returning the same cloud over again
+		if( nhvd_get_point_cloud_begin(network_decoder, &cloud) == NHVD_OK )
 		{
-			//...
-			//do something with the:
-			// - frame.width
-			// - frame.height
-			// - frame.format
-			// - frame.data
-			// - frame.linesize
-			// be quick - we are holding the mutex
-			// Examples:
-			// - fill the texture
-			// - copy for later use if you can't be quick
-			//...
-			cout << endl << "decoded frame " << frame.width << "x" << frame.height << " format " << frame.format <<
-			" ls[0] " << frame.linesize[0] << " ls[1] " << frame.linesize[1]  << " ls[2]" << frame.linesize[2] << endl;
+//			cout << endl << "decoded frame " << frame.width << "x" << frame.height << " format " << frame.format <<
+//			" ls[0] " << frame.linesize[0] << " ls[1] " << frame.linesize[1]  << " ls[2]" << frame.linesize[2] << endl;
+
+			int u = cloud.used;
+			int m = cloud.used/2;
+			cout << "Unprojected points: " << u << endl;
+			cout << "[m]=[" << cloud.data[m][0] << "," << cloud.data[m][1] << "," << cloud.data[m][2] << "]"  << endl;
+		//	cout << "[used-1]=[" << cloud.data[u-1][0] << "," << cloud.data[u-1][1] << "," << cloud.data[u-1][2] << "]"  << endl;	
 		}
 
-		if( nhvd_get_frame_end(network_decoder) != NHVD_OK )
+		if( nhvd_get_point_cloud_end(network_decoder) != NHVD_OK )
 			break; //error occured
 
 		//this should spin once per frame rendering

@@ -1,7 +1,7 @@
 /*
  * NHVD Network Hardware Video Decoder C++ library implementation
  *
- * Copyright 2019 (C) Bartosz Meglicki <meglickib@gmail.com>
+ * Copyright 2020 (C) Bartosz Meglicki <meglickib@gmail.com>
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -15,17 +15,26 @@
 #include "mlsp.h"
 // Hardware Video Decoder library
 #include "hvd.h"
+// Hardware Depth Unprojector library
+#include "hdu.h"
 
 #include <thread>
 #include <mutex>
 #include <fstream>
 #include <iostream>
+#include <string.h> //memset
 
 using namespace std;
 
 static void nhvd_network_decoder_thread(nhvd *n);
 static int nhvd_decode_frame(nhvd *n, hvd_packet* packet);
 static nhvd *nhvd_close_and_return_null(nhvd *n);
+
+const float PPX=421.353;
+const float PPY=240.93;
+const float FX=426.768;
+const float FY=426.768;
+const float DEPTH_UNIT=0.0001;
 
 struct nhvd
 {
@@ -35,10 +44,18 @@ struct nhvd
 	AVFrame *frame;
 	std::mutex frame_mutex;
 
+	hdu *hardware_unprojector;
+	hdu_point_cloud point_cloud;
+
 	thread network_thread;
 	bool keep_working;
 
-	nhvd(): network_streamer(NULL), hardware_decoder(NULL), frame(NULL), keep_working(true) {}
+	nhvd(): network_streamer(NULL),
+			hardware_decoder(NULL),
+			frame(NULL),
+			hardware_unprojector(NULL),
+			keep_working(true)
+	{}
 };
 
 struct nhvd *nhvd_init(const nhvd_net_config *net_config,const nhvd_hw_config *hw_config)
@@ -70,6 +87,14 @@ struct nhvd *nhvd_init(const nhvd_net_config *net_config,const nhvd_hw_config *h
 		return nhvd_close_and_return_null(n);
 	}
 	n->frame->data[0]=NULL;
+
+	if( (n->hardware_unprojector = hdu_init(PPX, PPY, FX, FY, DEPTH_UNIT)) == NULL )
+	{
+		cerr << "nhvd: failed to initialize hardware unprojector" << endl;
+		return nhvd_close_and_return_null(n);
+	}
+
+	n->point_cloud.data = NULL, n->point_cloud.size = 0, n->point_cloud.used = 0;
 
 	n->network_thread = thread(nhvd_network_decoder_thread, n);
 
@@ -123,9 +148,29 @@ static int nhvd_decode_frame(nhvd *n, hvd_packet* packet)
 
 	while( (frame = hvd_receive_frame(n->hardware_decoder, &error) ) != NULL )
 	{
-		std::lock_guard<std::mutex> frame_guard(n->frame_mutex);
+//		std::lock_guard<std::mutex> frame_guard(n->frame_mutex);
+//		av_frame_unref(n->frame);
+//		av_frame_ref(n->frame, frame);
 		av_frame_unref(n->frame);
 		av_frame_ref(n->frame, frame);
+
+		//guard the point cloud, not the frame
+		std::lock_guard<std::mutex> frame_guard(n->frame_mutex);
+		//unproject
+		int size = n->frame->width * n->frame->height;
+		if(size != n->point_cloud.size)
+		{
+			delete [] n->point_cloud.data;
+			n->point_cloud.data = new float3[size];
+			n->point_cloud.size = size;
+			n->point_cloud.used = 0;
+		}
+
+		hdu_depth depth = {(uint16_t*)n->frame->data[0], n->frame->width, n->frame->height, n->frame->linesize[0]};
+		//this could be moved to separate thread
+		hdu_unproject(n->hardware_unprojector, &depth, &n->point_cloud);
+		//temp
+		memset(n->point_cloud.data + n->point_cloud.used, 0, (n->point_cloud.size-n->point_cloud.used)*sizeof(n->point_cloud.data[0]));
 	}
 
 	if(error != HVD_OK)
@@ -170,6 +215,36 @@ int nhvd_get_frame_end(struct nhvd *n)
 	return NHVD_OK;
 }
 
+//NULL if there is no fresh data, non NULL otherwise
+int nhvd_get_point_cloud_begin(nhvd *n, nhvd_point_cloud *pc)
+{
+	if(n == NULL)
+		return NHVD_ERROR;
+
+	n->frame_mutex.lock();
+
+	//for user convinience, return ERROR if there is no data
+	if(n->point_cloud.data == NULL)
+		return NHVD_ERROR;
+
+	pc->data = n->point_cloud.data;
+	pc->size = n->point_cloud.size;
+	pc->used = n->point_cloud.used;
+
+	return NHVD_OK;
+
+}
+//returns HVE_OK on success, HVE_ERROR on fatal error
+int nhvd_get_point_cloud_end(nhvd *n)
+{
+	if(n == NULL)
+		return NHVD_ERROR;
+
+	n->frame_mutex.unlock();
+
+	return NHVD_OK;
+}
+
 static nhvd *nhvd_close_and_return_null(nhvd *n)
 {
 	nhvd_close(n);
@@ -187,6 +262,8 @@ void nhvd_close(nhvd *n)
 
 	mlsp_close(n->network_streamer);
 	hvd_close(n->hardware_decoder);
+	hdu_close(n->hardware_unprojector);
+	delete [] n->point_cloud.data;
 
 	av_frame_free(&n->frame);
 

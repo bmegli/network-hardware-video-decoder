@@ -64,6 +64,15 @@ struct nhvd_frame
 	int linesize[NHVD_NUM_DATA_POINTERS];
 };
 
+typedef float float3[3];
+
+struct nhvd_point_cloud
+{
+	float3 *data;
+	int size;
+	int used;
+};
+
 enum nhvd_retval_enum
 {
 	NHVD_ERROR=-1, //!< error occured
@@ -76,9 +85,13 @@ NHVD_EXPORT NHVD_API void nhvd_close(nhvd *n);
 
 //NULL if there is no fresh data, non NULL otherwise
 NHVD_EXPORT NHVD_API int nhvd_get_frame_begin(nhvd *n, nhvd_frame *frame);
-
 //returns HVE_OK on success, HVE_ERROR on fatal error
 NHVD_EXPORT NHVD_API int nhvd_get_frame_end(nhvd *n);
+
+//NULL if there is no fresh data, non NULL otherwise
+NHVD_EXPORT NHVD_API int nhvd_get_point_cloud_begin(nhvd *n, nhvd_point_cloud *pc);
+//returns HVE_OK on success, HVE_ERROR on fatal error
+NHVD_EXPORT NHVD_API int nhvd_get_point_cloud_end(nhvd *n);
 
 }
 
