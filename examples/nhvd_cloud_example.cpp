@@ -24,6 +24,11 @@ using namespace std;
 void main_loop(nhvd *network_decoder);
 int process_user_input(int argc, char **argv, nhvd_hw_config *hw_config, nhvd_net_config *net_config);
 
+//network configuration
+const char *IP=NULL; //listen on or NULL (listen on any)
+const uint16_t PORT=9768; //to be input through CLI
+const int TIMEOUT_MS=500; //timeout, accept new streaming sequence by receiver
+
 //decoder configuration
 const char *HARDWARE=NULL; //input through CLI, e.g. "vaapi"
 const char *CODEC=NULL;  //input through CLI, e.g. "h264"
@@ -37,25 +42,26 @@ const int PROFILE=0; //0 to leave as FF_PROFILE_UNKNOWN
 //for list of profiles see:
 //https://ffmpeg.org/doxygen/3.4/avcodec_8h.html#ab424d258655424e4b1690e2ab6fcfc66
 
-//network configuration
-const char *IP=NULL; //listen on or NULL (listen on any)
-const uint16_t PORT=9766; //to be input through CLI
-const int TIMEOUT_MS=500; //timeout, accept new streaming sequence by receiver
+//depth unprojection configuration
+const float PPX=421.353;
+const float PPY=240.93;
+const float FX=426.768;
+const float FY=426.768;
+const float DEPTH_UNIT=0.0001;
 
 //we simpulate application rendering at framerate
 const int FRAMERATE = 30;
-const int SLEEP_US = 1000000/30;
-
 
 int main(int argc, char **argv)
 {
-	nhvd_hw_config hw_config= {HARDWARE, CODEC, DEVICE, PIXEL_FORMAT, WIDTH, HEIGHT, PROFILE};
-	nhvd_net_config net_config= {IP, PORT, TIMEOUT_MS};
+	nhvd_net_config net_config = {IP, PORT, TIMEOUT_MS};
+	nhvd_hw_config hw_config = {HARDWARE, CODEC, DEVICE, PIXEL_FORMAT, WIDTH, HEIGHT, PROFILE};
+	nhvd_depth_config depth_config = {PPX, PPY, FX, FY, DEPTH_UNIT};
 
 	if(process_user_input(argc, argv, &hw_config, &net_config) != 0)
 		return 1;
 
-	nhvd *network_decoder = nhvd_init(&net_config, &hw_config);
+	nhvd *network_decoder = nhvd_init(&net_config, &hw_config, &depth_config);
 
 	if(!network_decoder)
 	{
@@ -71,6 +77,8 @@ int main(int argc, char **argv)
 
 void main_loop(nhvd *network_decoder)
 {
+	const int SLEEP_US = 1000000/FRAMERATE;
+
 	//this is where we will get the decoded data
 	nhvd_frame frame;
 	nhvd_point_cloud cloud;
@@ -79,17 +87,14 @@ void main_loop(nhvd *network_decoder)
 
 	while(keep_working)
 	{
-		//add mechanism to prevent returning the same cloud over again
 		if( nhvd_get_point_cloud_begin(network_decoder, &cloud) == NHVD_OK )
 		{
-//			cout << endl << "decoded frame " << frame.width << "x" << frame.height << " format " << frame.format <<
-//			" ls[0] " << frame.linesize[0] << " ls[1] " << frame.linesize[1]  << " ls[2]" << frame.linesize[2] << endl;
-
 			int u = cloud.used;
-			int m = cloud.used/2;
-			cout << "Unprojected points: " << u << endl;
-			cout << "[m]=[" << cloud.data[m][0] << "," << cloud.data[m][1] << "," << cloud.data[m][2] << "]"  << endl;
-		//	cout << "[used-1]=[" << cloud.data[u-1][0] << "," << cloud.data[u-1][1] << "," << cloud.data[u-1][2] << "]"  << endl;	
+			cout << "Unprojected points: " << cloud.used << endl;
+			//do something with:
+			// - cloud.data
+			// - cloud.size
+			// - cloud.used
 		}
 
 		if( nhvd_get_point_cloud_end(network_decoder) != NHVD_OK )
@@ -107,16 +112,7 @@ int process_user_input(int argc, char **argv, nhvd_hw_config *hw_config, nhvd_ne
 	{
 		fprintf(stderr, "Usage: %s <port> <hardware> <codec> <pixel format> [device] [width] [height] [profile]\n\n", argv[0]);
 		fprintf(stderr, "examples: \n");
-		fprintf(stderr, "%s 9766 vaapi h264 bgr0 \n", argv[0]);
-		fprintf(stderr, "%s 9766 vaapi h264 nv12 \n", argv[0]);
-		fprintf(stderr, "%s 9766 vdpau h264 yuv420p \n", argv[0]);
-		fprintf(stderr, "%s 9766 vaapi h264 bgr0 /dev/dri/renderD128\n", argv[0]);
-		fprintf(stderr, "%s 9766 vaapi h264 nv12 /dev/dri/renderD129\n", argv[0]);
-		fprintf(stderr, "%s 9766 dxva2 h264 nv12 \n", argv[0]);
-		fprintf(stderr, "%s 9766 d3d11va h264 nv12 \n", argv[0]);
-		fprintf(stderr, "%s 9766 videotoolbox h264 nv12 \n", argv[0]);
-		fprintf(stderr, "%s 9766 vaapi hevc nv12 /dev/dri/renderD128 640 360 1\n", argv[0]);
-		fprintf(stderr, "%s 9766 vaapi hevc p010le /dev/dri/renderD128 848 480 2\n", argv[0]);
+		fprintf(stderr, "%s 9768 vaapi hevc p010le /dev/dri/renderD128 848 480 2\n", argv[0]);
 
 		return 1;
 	}

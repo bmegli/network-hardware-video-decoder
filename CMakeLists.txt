@@ -21,7 +21,9 @@ target_include_directories(nhvd PRIVATE hardware-depth-unprojector)
 # note that nhvd depends through hvd on FFMpeg avcodec and avutil, at least 3.4 version
 target_link_libraries(nhvd hvd mlsp hdu avcodec avutil)
 
-add_executable(nhvd-receive-example examples/nhvd_receive_example.cpp)
-target_link_libraries(nhvd-receive-example nhvd hdu)
+add_executable(nhvd-frame-example examples/nhvd_frame_example.cpp)
+target_link_libraries(nhvd-frame-example nhvd hdu)
 
+add_executable(nhvd-cloud-example examples/nhvd_cloud_example.cpp)
+target_link_libraries(nhvd-cloud-example nhvd hdu)
 

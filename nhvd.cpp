@@ -1,7 +1,7 @@
 /*
  * NHVD Network Hardware Video Decoder C++ library implementation
  *
- * Copyright 2020 (C) Bartosz Meglicki <meglickib@gmail.com>
+ * Copyright 2019-2020 (C) Bartosz Meglicki <meglickib@gmail.com>
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -28,13 +28,8 @@ using namespace std;
 
 static void nhvd_network_decoder_thread(nhvd *n);
 static int nhvd_decode_frame(nhvd *n, hvd_packet* packet);
+static void nhvd_unproject_depth_frame(nhvd *n);
 static nhvd *nhvd_close_and_return_null(nhvd *n);
-
-const float PPX=421.353;
-const float PPY=240.93;
-const float FX=426.768;
-const float FY=426.768;
-const float DEPTH_UNIT=0.0001;
 
 struct nhvd
 {
@@ -42,7 +37,7 @@ struct nhvd
 
 	hvd *hardware_decoder;
 	AVFrame *frame;
-	std::mutex frame_mutex;
+	std::mutex mutex; //guards frame and point_cloud
 
 	hdu *hardware_unprojector;
 	hdu_point_cloud point_cloud;
@@ -54,11 +49,12 @@ struct nhvd
 			hardware_decoder(NULL),
 			frame(NULL),
 			hardware_unprojector(NULL),
+			point_cloud(),
 			keep_working(true)
 	{}
 };
 
-struct nhvd *nhvd_init(const nhvd_net_config *net_config,const nhvd_hw_config *hw_config)
+struct nhvd *nhvd_init(const nhvd_net_config *net_config,const nhvd_hw_config *hw_config, const nhvd_depth_config *depth_config)
 {
 	mlsp_config mlsp_cfg={net_config->ip, net_config->port, net_config->timeout_ms};
 	hvd_config hvd_cfg={hw_config->hardware, hw_config->codec, hw_config->device,
@@ -88,13 +84,16 @@ struct nhvd *nhvd_init(const nhvd_net_config *net_config,const nhvd_hw_config *h
 	}
 	n->frame->data[0]=NULL;
 
-	if( (n->hardware_unprojector = hdu_init(PPX, PPY, FX, FY, DEPTH_UNIT)) == NULL )
+	if(depth_config)
 	{
-		cerr << "nhvd: failed to initialize hardware unprojector" << endl;
-		return nhvd_close_and_return_null(n);
-	}
+		const nhvd_depth_config *dc=depth_config;
+		if( (n->hardware_unprojector = hdu_init(dc->ppx, dc->ppy, dc->fx, dc->fy, dc->depth_unit)) == NULL )
+		{
+			cerr << "nhvd: failed to initialize hardware unprojector" << endl;
+			return nhvd_close_and_return_null(n);
+		}
 
-	n->point_cloud.data = NULL, n->point_cloud.size = 0, n->point_cloud.used = 0;
+	}
 
 	n->network_thread = thread(nhvd_network_decoder_thread, n);
 
@@ -148,29 +147,13 @@ static int nhvd_decode_frame(nhvd *n, hvd_packet* packet)
 
 	while( (frame = hvd_receive_frame(n->hardware_decoder, &error) ) != NULL )
 	{
-//		std::lock_guard<std::mutex> frame_guard(n->frame_mutex);
-//		av_frame_unref(n->frame);
-//		av_frame_ref(n->frame, frame);
+		std::lock_guard<std::mutex> frame_guard(n->mutex);
+
 		av_frame_unref(n->frame);
 		av_frame_ref(n->frame, frame);
 
-		//guard the point cloud, not the frame
-		std::lock_guard<std::mutex> frame_guard(n->frame_mutex);
-		//unproject
-		int size = n->frame->width * n->frame->height;
-		if(size != n->point_cloud.size)
-		{
-			delete [] n->point_cloud.data;
-			n->point_cloud.data = new float3[size];
-			n->point_cloud.size = size;
-			n->point_cloud.used = 0;
-		}
-
-		hdu_depth depth = {(uint16_t*)n->frame->data[0], n->frame->width, n->frame->height, n->frame->linesize[0]};
-		//this could be moved to separate thread
-		hdu_unproject(n->hardware_unprojector, &depth, &n->point_cloud);
-		//temp
-		memset(n->point_cloud.data + n->point_cloud.used, 0, (n->point_cloud.size-n->point_cloud.used)*sizeof(n->point_cloud.data[0]));
+		if(n->hardware_unprojector)
+			nhvd_unproject_depth_frame(n);
 	}
 
 	if(error != HVD_OK)
@@ -182,67 +165,89 @@ static int nhvd_decode_frame(nhvd *n, hvd_packet* packet)
 	return NHVD_OK;
 }
 
-int nhvd_get_frame_begin(nhvd *n, nhvd_frame *frame)
+static void nhvd_unproject_depth_frame(nhvd *n)
+{
+		int size = n->frame->width * n->frame->height;
+		if(size != n->point_cloud.size)
+		{
+			delete [] n->point_cloud.data;
+			n->point_cloud.data = new float3[size];
+			n->point_cloud.size = size;
+			n->point_cloud.used = 0;
+		}
+		//if frame is not uint16 data this may blow up
+		hdu_depth depth = {(uint16_t*)n->frame->data[0], n->frame->width, n->frame->height, n->frame->linesize[0]};
+		//this could be moved to separate thread
+		hdu_unproject(n->hardware_unprojector, &depth, &n->point_cloud);
+		//zero out unused point cloud entries
+		memset(n->point_cloud.data + n->point_cloud.used, 0, (n->point_cloud.size-n->point_cloud.used)*sizeof(n->point_cloud.data[0]));
+}
+
+//NULL if there is no fresh data, non NULL otherwise
+int nhvd_get_begin(nhvd *n, nhvd_frame *frame, nhvd_point_cloud *pc)
 {
 	if(n == NULL)
 		return NHVD_ERROR;
 
-	n->frame_mutex.lock();
+	n->mutex.lock();
 
 	//for user convinience, return ERROR if there is no data
 	if(n->frame->data[0] == NULL)
 		return NHVD_ERROR;
 
-	frame->width = n->frame->width;
-	frame->height = n->frame->height;
-	frame->format = n->frame->format;
+	if(frame)
+	{
+		frame->width = n->frame->width;
+		frame->height = n->frame->height;
+		frame->format = n->frame->format;
 
-	//copy just a few ints and pointers, not the actual data
-	memcpy(frame->linesize, n->frame->linesize, sizeof(frame->linesize));
-	memcpy(frame->data, n->frame->data, sizeof(frame->data));
+		//copy just a few ints and pointers, not the actual data
+		memcpy(frame->linesize, n->frame->linesize, sizeof(frame->linesize));
+		memcpy(frame->data, n->frame->data, sizeof(frame->data));
+	}
+
+	if(pc && n->hardware_unprojector)
+	{
+		//copy just a pointer and two ints
+		pc->data = n->point_cloud.data;
+		pc->size = n->point_cloud.size;
+		pc->used = n->point_cloud.used;
+	}
 
 	return NHVD_OK;
 }
 
-int nhvd_get_frame_end(struct nhvd *n)
+//returns HVE_OK on success, HVE_ERROR on fatal error
+int nhvd_get_end(struct nhvd *n)
 {
 	if(n == NULL)
 		return NHVD_ERROR;
 
 	av_frame_unref(n->frame);
 
-	n->frame_mutex.unlock();
+	n->mutex.unlock();
+
 	return NHVD_OK;
 }
 
-//NULL if there is no fresh data, non NULL otherwise
+int nhvd_get_frame_begin(nhvd *n, nhvd_frame *frame)
+{
+	return nhvd_get_begin(n, frame, NULL);
+}
+
+int nhvd_get_frame_end(struct nhvd *n)
+{
+	return nhvd_get_end(n);
+}
+
 int nhvd_get_point_cloud_begin(nhvd *n, nhvd_point_cloud *pc)
 {
-	if(n == NULL)
-		return NHVD_ERROR;
-
-	n->frame_mutex.lock();
-
-	//for user convinience, return ERROR if there is no data
-	if(n->point_cloud.data == NULL)
-		return NHVD_ERROR;
-
-	pc->data = n->point_cloud.data;
-	pc->size = n->point_cloud.size;
-	pc->used = n->point_cloud.used;
-
-	return NHVD_OK;
-
+	return nhvd_get_begin(n, NULL, pc);
 }
-//returns HVE_OK on success, HVE_ERROR on fatal error
+
 int nhvd_get_point_cloud_end(nhvd *n)
 {
-	if(n == NULL)
-		return NHVD_ERROR;
-
-	n->frame_mutex.unlock();
-
-	return NHVD_OK;
+	return nhvd_get_end(n);
 }
 
 static nhvd *nhvd_close_and_return_null(nhvd *n)
