@@ -28,7 +28,7 @@ using namespace std;
 
 static void nhvd_network_decoder_thread(nhvd *n);
 static int nhvd_decode_frame(nhvd *n, hvd_packet* packet);
-static void nhvd_unproject_depth_frame(nhvd *n);
+static int nhvd_unproject_depth_frame(nhvd *n);
 static nhvd *nhvd_close_and_return_null(nhvd *n);
 
 struct nhvd
@@ -122,7 +122,6 @@ static void nhvd_network_decoder_thread(nhvd *n)
 			break;
 		}
 
-		cout << "collected frame " << streamer_frame->framenumber;
 		packet.data=streamer_frame->data;
 		packet.size=streamer_frame->size;
 
@@ -153,7 +152,8 @@ static int nhvd_decode_frame(nhvd *n, hvd_packet* packet)
 		av_frame_ref(n->frame, frame);
 
 		if(n->hardware_unprojector)
-			nhvd_unproject_depth_frame(n);
+			if(nhvd_unproject_depth_frame(n) != NHVD_OK)
+				return NHVD_ERROR;
 	}
 
 	if(error != HVD_OK)
@@ -165,8 +165,15 @@ static int nhvd_decode_frame(nhvd *n, hvd_packet* packet)
 	return NHVD_OK;
 }
 
-static void nhvd_unproject_depth_frame(nhvd *n)
+static int nhvd_unproject_depth_frame(nhvd *n)
 {
+		if(n->frame->linesize[0] / n->frame->width != 2)
+		{  //this sanity check is not perfect, we may still get 16 bit data with some strange format
+			cerr << "nhvd_unproject_depth_frame expects uint16 data" <<
+			", got pixel format " << n->frame->format << " (expected p010le)"<< endl;
+			return NHVD_ERROR;
+		}
+
 		int size = n->frame->width * n->frame->height;
 		if(size != n->point_cloud.size)
 		{
@@ -175,12 +182,14 @@ static void nhvd_unproject_depth_frame(nhvd *n)
 			n->point_cloud.size = size;
 			n->point_cloud.used = 0;
 		}
-		//if frame is not uint16 data this may blow up
+
 		hdu_depth depth = {(uint16_t*)n->frame->data[0], n->frame->width, n->frame->height, n->frame->linesize[0]};
 		//this could be moved to separate thread
 		hdu_unproject(n->hardware_unprojector, &depth, &n->point_cloud);
 		//zero out unused point cloud entries
 		memset(n->point_cloud.data + n->point_cloud.used, 0, (n->point_cloud.size-n->point_cloud.used)*sizeof(n->point_cloud.data[0]));
+
+		return NHVD_OK;
 }
 
 //NULL if there is no fresh data, non NULL otherwise
