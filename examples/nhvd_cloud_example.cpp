@@ -123,9 +123,9 @@ int process_user_input(int argc, char **argv, nhvd_hw_config *hw_config, nhvd_ne
 	hw_config->pixel_format = argv[4];
 	hw_config->device = argv[5]; //NULL or device, both are ok
 
-	if(argc >= 6) hw_config->width = atoi(argv[6]);
-	if(argc >= 7) hw_config->height = atoi(argv[7]);
-	if(argc >= 8) hw_config->profile = atoi(argv[8]);
+	if(argc > 6) hw_config->width = atoi(argv[6]);
+	if(argc > 7) hw_config->height = atoi(argv[7]);
+	if(argc > 8) hw_config->profile = atoi(argv[8]);
 
 	return 0;
 }
