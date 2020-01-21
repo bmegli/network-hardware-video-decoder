@@ -89,12 +89,11 @@ void main_loop(nhvd *network_decoder)
 	{
 		if( nhvd_get_point_cloud_begin(network_decoder, &cloud) == NHVD_OK )
 		{
-			int u = cloud.used;
-			cout << "Unprojected points: " << cloud.used << endl;
 			//do something with:
 			// - cloud.data
 			// - cloud.size
 			// - cloud.used
+			cout << "Decoded cloud with " << cloud.used << " points" << endl;
 		}
 
 		if( nhvd_get_point_cloud_end(network_decoder) != NHVD_OK )

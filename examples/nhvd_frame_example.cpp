@@ -91,7 +91,7 @@ void main_loop(nhvd *network_decoder)
 			// - fill the texture
 			// - copy for later use if you can't be quick
 			//...
-			cout << endl << "decoded frame " << frame.width << "x" << frame.height << " format " << frame.format <<
+			cout << "decoded frame " << frame.width << "x" << frame.height << " format " << frame.format <<
 			" ls[0] " << frame.linesize[0] << " ls[1] " << frame.linesize[1]  << " ls[2]" << frame.linesize[2] << endl;
 		}
 
