@@ -138,6 +138,11 @@ struct nhvd_frame
 typedef float float3[3];
 
 /**
+  * @brief Vertex color data (rgba), currently only a as greyscale
+  */
+typedef uint32_t color32;
+
+/**
  * @struct nhvd_point_cloud
  * @brief Point cloud abstraction.
  *
@@ -148,6 +153,7 @@ typedef float float3[3];
 struct nhvd_point_cloud
 {
 	float3 *data; //!< array of point coordinates
+	color32 *colors; //!< array of point colors
 	int size; //!< size of array
 	int used; //!< number of elements used in array
 };

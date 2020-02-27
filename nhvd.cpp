@@ -178,16 +178,19 @@ static int nhvd_unproject_depth_frame(nhvd *n)
 		if(size != n->point_cloud.size)
 		{
 			delete [] n->point_cloud.data;
+			delete [] n->point_cloud.colors;
 			n->point_cloud.data = new float3[size];
+			n->point_cloud.colors = new color32[size];
 			n->point_cloud.size = size;
 			n->point_cloud.used = 0;
 		}
 
-		hdu_depth depth = {(uint16_t*)n->frame->data[0], n->frame->width, n->frame->height, n->frame->linesize[0]};
+		hdu_depth depth = {(uint16_t*)n->frame->data[0], (uint8_t*)n->frame->data[1], n->frame->width, n->frame->height, n->frame->linesize[0]};
 		//this could be moved to separate thread
 		hdu_unproject(n->hardware_unprojector, &depth, &n->point_cloud);
 		//zero out unused point cloud entries
 		memset(n->point_cloud.data + n->point_cloud.used, 0, (n->point_cloud.size-n->point_cloud.used)*sizeof(n->point_cloud.data[0]));
+		memset(n->point_cloud.colors + n->point_cloud.used, 0, (n->point_cloud.size-n->point_cloud.used)*sizeof(n->point_cloud.colors[0]));
 
 		return NHVD_OK;
 }
@@ -217,8 +220,9 @@ int nhvd_get_begin(nhvd *n, nhvd_frame *frame, nhvd_point_cloud *pc)
 
 	if(pc && n->hardware_unprojector)
 	{
-		//copy just a pointer and two ints
+		//copy just two pointers and ints
 		pc->data = n->point_cloud.data;
+		pc->colors = n->point_cloud.colors;
 		pc->size = n->point_cloud.size;
 		pc->used = n->point_cloud.used;
 	}
@@ -278,6 +282,7 @@ void nhvd_close(nhvd *n)
 	hvd_close(n->hardware_decoder);
 	hdu_close(n->hardware_unprojector);
 	delete [] n->point_cloud.data;
+	delete [] n->point_cloud.colors;
 
 	av_frame_free(&n->frame);
 
