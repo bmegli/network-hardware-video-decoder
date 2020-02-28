@@ -146,7 +146,7 @@ typedef uint32_t color32;
  * @struct nhvd_point_cloud
  * @brief Point cloud abstraction.
  *
- * Array of float3 points. Only used points are non zero.
+ * Array of float3 points and color32 colors. Only used points are non zero.
  *
  * @see nhvd_get_point_cloud_begin, nhvd_get_point_cloud_end, nhvd_get_begin, nhvd_get_end
  */

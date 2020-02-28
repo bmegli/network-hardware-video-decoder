@@ -111,7 +111,7 @@ If you have multiple vaapi devices you may have to specify correct one e.g. "/de
 
 See [HVD](https://github.com/bmegli/hardware-video-decoder) docs for details about hardware configuration.
 
-See examples directory for a more complete example.
+See examples directory for a more complete examples.
 
 ```C++
 	nhvd_hw_config hw_config= {"vaapi", "h264", "/dev/dri/renderD128", "bgr0"};
@@ -167,7 +167,7 @@ Since you are linking to FFmpeg libraries consider also `avcodec` and `avutil` l
 
 ### Library uses
 
-Hardware decode & render in Unity from H.264 network stream [unity-network-hardware-video-decoder](https://github.com/bmegli/unity-network-hardware-video-decoder)
+Hardware decode & render in Unity from H.264/HEVC/HEVC Main10 network stream [unity-network-hardware-video-decoder](https://github.com/bmegli/unity-network-hardware-video-decoder)
 
 ### Streaming data
 

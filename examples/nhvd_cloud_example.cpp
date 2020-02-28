@@ -91,6 +91,7 @@ void main_loop(nhvd *network_decoder)
 		{
 			//do something with:
 			// - cloud.data
+			// - cloud.colors
 			// - cloud.size
 			// - cloud.used
 			cout << "Decoded cloud with " << cloud.used << " points" << endl;
