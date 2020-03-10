@@ -42,7 +42,7 @@ Library depends on:
 
 HVD and MLSP are included as submodules so you only need to satifisy HVD dependencies.
 
-Works with system FFmpeg on Ubuntu 18.04 and doesn't on 16.04 (outdated FFmpeg).
+Works with system FFmpeg on Ubuntu 18.04 and doesn't on 16.04 (outdated FFmpeg and VAAPI ecosystem).
 
 ## Building Instructions
 
