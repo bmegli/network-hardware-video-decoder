@@ -112,10 +112,13 @@ static void nhvd_network_decoder_thread(nhvd *n)
 
 		if(streamer_frame == NULL)
 		{
-			if(error==MLSP_TIMEOUT)
+			if(error == MLSP_TIMEOUT)
 			{
 				cout << "." << endl;
+				//accept new streaming sequence
 				mlsp_receive_reset(n->network_streamer);
+				//flush (drain) the decoder and prepare for new stream
+				nhvd_decode_frame(n, NULL);
 				continue;
 			}
 			cerr << "nhvd: error while receiving frame" << endl;
