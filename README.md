@@ -9,6 +9,7 @@ See [hardware-video-streaming](https://github.com/bmegli/hardware-video-streamin
 The intent behind library:
 - minimize video latency
 - minimize CPU usage (hardware decoding and color conversions)
+- multi-frame streaming (e.g. depth + texture)
 - simple interface for interfacing from Unity
 
 Unity calls `Update` function once per frame, preparing data for rendering.
@@ -111,13 +112,13 @@ If you have multiple vaapi devices you may have to specify correct one e.g. "/de
 
 See [HVD](https://github.com/bmegli/hardware-video-decoder) docs for details about hardware configuration.
 
-See examples directory for a more complete examples.
+See examples directory for more complete examples.
 
 ```C++
 	nhvd_hw_config hw_config= {"vaapi", "h264", "/dev/dri/renderD128", "bgr0"};
 	nhvd_net_config net_config= {NULL, 9765, 500};
 
-	nhvd *network_decoder=nhvd_init(&net_config, &hw_config);
+	nhvd *network_decoder=nhvd_init(&net_config, &hw_config, 1, NULL);
 
 	//this is where we will get the decoded data	
 	nhvd_frame frame;

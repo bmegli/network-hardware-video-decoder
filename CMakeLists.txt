@@ -25,6 +25,9 @@ target_link_libraries(nhvd hvd mlsp hdu avcodec avutil)
 add_executable(nhvd-frame-example examples/nhvd_frame_example.cpp)
 target_link_libraries(nhvd-frame-example nhvd hdu)
 
+add_executable(nhvd-frame-multi-example examples/nhvd_frame_multi_example.cpp)
+target_link_libraries(nhvd-frame-multi-example nhvd hdu)
+
 add_executable(nhvd-cloud-example examples/nhvd_cloud_example.cpp)
 target_link_libraries(nhvd-cloud-example nhvd hdu)
 

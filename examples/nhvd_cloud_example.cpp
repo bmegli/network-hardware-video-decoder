@@ -31,14 +31,15 @@ const int TIMEOUT_MS=500; //timeout, accept new streaming sequence by receiver
 
 //decoder configuration
 const char *HARDWARE=NULL; //input through CLI, e.g. "vaapi"
-const char *CODEC=NULL;  //input through CLI, e.g. "h264"
+const char *CODEC="hevc";  //we assume hevc for both depth and texture
 const char *DEVICE=NULL; //optionally input through CLI, e.g. "/dev/dri/renderD128"
-const char *PIXEL_FORMAT=NULL; //input through CLI, NULL for default (NV12) or pixel format e.g. "rgb0"
-//the pixel format that you want to receive data in
-//this has to be supported by hardware
+const char *PIXEL_FORMAT_DEPTH="p010le"; //we encode depth map with p010le pixel format
+const char *PIXEL_FORMAT_TEXTURE="rgb0"; //we want data in rgb0, we expect it in unprojection
 const int WIDTH=0; //0 to not specify, needed by some codecs
 const int HEIGHT=0; //0 to not specify, needed by some codecs
-const int PROFILE=0; //0 to leave as FF_PROFILE_UNKNOWN
+const int PROFILE_DEPTH=2; //hardcoded for now, we need 10 bit HEVC Main 10 for depth encoding
+const int PROFILE_TEXTURE=1; //hardcoded for now, we use HEVC Main for texture encoding
+
 //for list of profiles see:
 //https://ffmpeg.org/doxygen/3.4/avcodec_8h.html#ab424d258655424e4b1690e2ab6fcfc66
 
@@ -55,13 +56,18 @@ const int FRAMERATE = 30;
 int main(int argc, char **argv)
 {
 	nhvd_net_config net_config = {IP, PORT, TIMEOUT_MS};
-	nhvd_hw_config hw_config = {HARDWARE, CODEC, DEVICE, PIXEL_FORMAT, WIDTH, HEIGHT, PROFILE};
+
+	nhvd_hw_config hw_config[2] = {
+		{HARDWARE, CODEC, DEVICE, PIXEL_FORMAT_DEPTH, WIDTH, HEIGHT, PROFILE_DEPTH},
+		{HARDWARE, CODEC, DEVICE, PIXEL_FORMAT_TEXTURE, WIDTH, HEIGHT, PROFILE_TEXTURE}
+	                           };
+
 	nhvd_depth_config depth_config = {PPX, PPY, FX, FY, DEPTH_UNIT};
 
-	if(process_user_input(argc, argv, &hw_config, &net_config) != 0)
+	if(process_user_input(argc, argv, hw_config, &net_config) != 0)
 		return 1;
 
-	nhvd *network_decoder = nhvd_init(&net_config, &hw_config, &depth_config);
+	nhvd *network_decoder = nhvd_init(&net_config, hw_config, 2, &depth_config);
 
 	if(!network_decoder)
 	{
@@ -94,7 +100,7 @@ void main_loop(nhvd *network_decoder)
 			// - cloud.colors
 			// - cloud.size
 			// - cloud.used
-			cout << "Decoded cloud with " << cloud.used << " points" << endl;
+			cout << "Decoded cloud with " << cloud.used  << " points" << endl;
 		}
 
 		if( nhvd_get_point_cloud_end(network_decoder) != NHVD_OK )
@@ -108,24 +114,29 @@ void main_loop(nhvd *network_decoder)
 
 int process_user_input(int argc, char **argv, nhvd_hw_config *hw_config, nhvd_net_config *net_config)
 {
-	if(argc < 5)
+	if(argc < 3)
 	{
-		fprintf(stderr, "Usage: %s <port> <hardware> <codec> <pixel format> [device] [width] [height] [profile]\n\n", argv[0]);
+		fprintf(stderr, "Usage: %s <port> <hardware> [device] [width] [height] \n\n", argv[0]);
 		fprintf(stderr, "examples: \n");
-		fprintf(stderr, "%s 9768 vaapi hevc p010le /dev/dri/renderD128 848 480 2\n", argv[0]);
+		fprintf(stderr, "%s 9768 vaapi /dev/dri/renderD128 640 360\n", argv[0]);
+		fprintf(stderr, "%s 9768 vaapi /dev/dri/renderD128 848 480\n", argv[0]);
 
 		return 1;
 	}
 
 	net_config->port = atoi(argv[1]);
-	hw_config->hardware = argv[2];
-	hw_config->codec = argv[3];
-	hw_config->pixel_format = argv[4];
-	hw_config->device = argv[5]; //NULL or device, both are ok
 
-	if(argc > 6) hw_config->width = atoi(argv[6]);
-	if(argc > 7) hw_config->height = atoi(argv[7]);
-	if(argc > 8) hw_config->profile = atoi(argv[8]);
+	hw_config[0].hardware = argv[2];
+	hw_config[1].hardware = argv[2];
+
+	hw_config[0].device = argv[3]; //NULL or device, both are ok
+	hw_config[1].device = argv[3]; //NULL or device, both are ok
+
+	if(argc > 4) hw_config[0].width = atoi(argv[4]);
+	if(argc > 5) hw_config[0].height = atoi(argv[5]);
+
+	if(argc > 4) hw_config[1].width = atoi(argv[4]);
+	if(argc > 5) hw_config[1].height = atoi(argv[5]);
 
 	return 0;
 }

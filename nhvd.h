@@ -170,11 +170,14 @@ enum nhvd_retval_enum
 /**
  * @brief Initialize internal library data.
  *
+ * Initialize streaming and single or multiple (hw_size > 1) hardware decoders.
+ *
  * For video streaming the argument depth_config should be NULL.
  * Non NULL depth_config enables depth unprojection (point cloud streaming).
  *
  * @param net_config network configuration
- * @param hw_config hardware decoder configuration
+ * @param hw_config hardware decoders configuration of hw_size size
+ * @param hw_size number of supplied hardware decoder configurations
  * @param depth_config unprojection configuration (may be NULL)
  * @return
  * - pointer to internal library data
@@ -184,7 +187,7 @@ enum nhvd_retval_enum
  */
 NHVD_EXPORT NHVD_API struct nhvd *nhvd_init(
 	const nhvd_net_config *net_config,
-	const nhvd_hw_config *hw_config,
+	const nhvd_hw_config *hw_config, int hw_size,
 	const nhvd_depth_config *depth_config);
 
 /**
@@ -208,10 +211,13 @@ NHVD_EXPORT NHVD_API void nhvd_close(nhvd *n);
  *  (e.g. fill the texture, fill the vertex buffer). The data is valid only until call to corresponding end
  *  function.
  *
+ *  The argument frame should point to single nhvd_frame or array of nhvd_frame
+ *  if library was initialized for multiple hardware decoders with ::nhvd_init.
+ *
  *  Functions will calculate point clouds from depth maps only if non NULL ::nhvd_depth_config was passed to ::nhvd_init
  *
  * @param n pointer to internal library data
- * @param frame pointer to frame description data
+ * @param frame pointer to frame description data (single or array)
  * @param pc pointer to point cloud description data
  * @return
  * - begin functions

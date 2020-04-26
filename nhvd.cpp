@@ -24,19 +24,27 @@
 #include <iostream>
 #include <string.h> //memset
 
+enum NHVD_COMPILE_TIME_CONSTANTS
+{
+	NHVD_MAX_DECODERS=3, //!< max number of decoders in multi decoding
+};
+
 using namespace std;
 
 static void nhvd_network_decoder_thread(nhvd *n);
 static int nhvd_decode_frame(nhvd *n, hvd_packet* packet);
-static int nhvd_unproject_depth_frame(nhvd *n);
-static nhvd *nhvd_close_and_return_null(nhvd *n);
+static int nhvd_unproject_depth_frame(nhvd *n, const AVFrame *depth_frame, const AVFrame *texture_frame);
+static nhvd *nhvd_close_and_return_null(nhvd *n, const char *msg);
+static int NHVD_ERROR_MSG(const char *msg);
 
 struct nhvd
 {
 	mlsp *network_streamer;
 
-	hvd *hardware_decoder;
-	AVFrame *frame;
+	hvd *hardware_decoder[NHVD_MAX_DECODERS];
+	int hardware_decoders_size;
+
+	AVFrame *frame[NHVD_MAX_DECODERS];
 	std::mutex mutex; //guards frame and point_cloud
 
 	hdu *hardware_unprojector;
@@ -45,54 +53,56 @@ struct nhvd
 	thread network_thread;
 	bool keep_working;
 
-	nhvd(): network_streamer(NULL),
-			hardware_decoder(NULL),
-			frame(NULL),
+	nhvd():
+			network_streamer(NULL),
+			hardware_decoder(), //zero out
+			hardware_decoders_size(0),
+			frame(), //zero out
 			hardware_unprojector(NULL),
 			point_cloud(),
 			keep_working(true)
 	{}
 };
 
-struct nhvd *nhvd_init(const nhvd_net_config *net_config,const nhvd_hw_config *hw_config, const nhvd_depth_config *depth_config)
+struct nhvd *nhvd_init(
+	const nhvd_net_config *net_config,
+	const nhvd_hw_config *hw_config, int hw_size,
+	const nhvd_depth_config *depth_config)
 {
 	mlsp_config mlsp_cfg={net_config->ip, net_config->port, net_config->timeout_ms};
-	hvd_config hvd_cfg={hw_config->hardware, hw_config->codec, hw_config->device,
-		hw_config->pixel_format, hw_config->width, hw_config->height, hw_config->profile};
+
+	if(hw_size > NHVD_MAX_DECODERS)
+		return nhvd_close_and_return_null(NULL, "the maximum number of decoders (compile time) exceeded");
 
 	nhvd *n=new nhvd();
 
 	if(n == NULL)
-	{
-		cerr << "nhvd: not enough memory for nhvd" << endl;
-		return NULL;
-	}
+		return nhvd_close_and_return_null(NULL, "not enough memory for nhvd");
+
 	if( (n->network_streamer = mlsp_init_server(&mlsp_cfg)) == NULL )
+		return nhvd_close_and_return_null(n, "failed to initialize network server");
+
+	n->hardware_decoders_size = hw_size;
+
+	for(int i=0;i<hw_size;++i)
 	{
-		cerr << "nhvd: failed to initialize network server" << endl;
-		return nhvd_close_and_return_null(n);
+		hvd_config hvd_cfg={hw_config[i].hardware, hw_config[i].codec, hw_config[i].device,
+		hw_config[i].pixel_format, hw_config[i].width, hw_config[i].height, hw_config[i].profile};
+
+		if( (n->hardware_decoder[i] = hvd_init(&hvd_cfg)) == NULL )
+			return nhvd_close_and_return_null(n, "failed to initalize hardware decoder");
+
+		if( (n->frame[i] = av_frame_alloc() ) == NULL)
+			return nhvd_close_and_return_null(n, "not enough memory for video frame");
+
+		n->frame[i]->data[0]=NULL;
 	}
-	if( (n->hardware_decoder = hvd_init(&hvd_cfg)) == NULL )
-	{
-		cerr << "nhvd: failed to initalize hardware decoder" << endl;
-		return nhvd_close_and_return_null(n);
-	}
-	if( (n->frame = av_frame_alloc() ) == NULL)
-	{
-		cerr << "nhvd: not enough memory for video frame" << endl;
-		return nhvd_close_and_return_null(n);
-	}
-	n->frame->data[0]=NULL;
 
 	if(depth_config)
 	{
 		const nhvd_depth_config *dc=depth_config;
 		if( (n->hardware_unprojector = hdu_init(dc->ppx, dc->ppy, dc->fx, dc->fy, dc->depth_unit)) == NULL )
-		{
-			cerr << "nhvd: failed to initialize hardware unprojector" << endl;
-			return nhvd_close_and_return_null(n);
-		}
-
+			return nhvd_close_and_return_null(n, "failed to initialize hardware unprojector");
 	}
 
 	n->network_thread = thread(nhvd_network_decoder_thread, n);
@@ -102,7 +112,7 @@ struct nhvd *nhvd_init(const nhvd_net_config *net_config,const nhvd_hw_config *h
 
 static void nhvd_network_decoder_thread(nhvd *n)
 {
-	hvd_packet packet={0};
+	hvd_packet packets[NHVD_MAX_DECODERS] = {0};
 	mlsp_frame *streamer_frame;
 	int error;
 
@@ -125,10 +135,12 @@ static void nhvd_network_decoder_thread(nhvd *n)
 			break;
 		}
 
-		packet.data=streamer_frame->data;
-		packet.size=streamer_frame->size;
-
-		if (nhvd_decode_frame(n, &packet) != NHVD_OK)
+		for(int i=0;i<n->hardware_decoders_size;++i)
+		{
+			packets[i].data=streamer_frame->data[i];
+			packets[i].size=streamer_frame->size[i];
+		}
+		if (nhvd_decode_frame(n, packets) != NHVD_OK)
 			break;
 	}
 
@@ -136,66 +148,101 @@ static void nhvd_network_decoder_thread(nhvd *n)
 	cerr << "nhvd: network decoder thread finished" << endl;
 }
 
-static int nhvd_decode_frame(nhvd *n, hvd_packet* packet)
+//NULL packet to flush all hardware decoders
+static int nhvd_decode_frame(nhvd *n, hvd_packet *packet)
 {
-	AVFrame *frame = NULL;
+	AVFrame *frame[NHVD_MAX_DECODERS] = {0};
 	int error = 0;
 
-	if(hvd_send_packet(n->hardware_decoder, packet) != HVD_OK)
+	//special NULL packet case with flush request
+	for(int i=0;!packet && i < n->hardware_decoders_size;++i)
+		if(hvd_send_packet(n->hardware_decoder[i], NULL) != HVD_OK)
+			return NHVD_ERROR_MSG("error during decoding (flush)");
+
+	//send data to all hardware decoders
+	for(int i=0;packet && i < n->hardware_decoders_size;++i)
 	{
-		cerr << "hvd: error during decoding" << endl;
-		return NHVD_ERROR; //fail actually?
+		if(!packet[i].size) //silently skip empty subframes
+			continue; //(e.g. different framerates/B frames)
+
+		if(hvd_send_packet(n->hardware_decoder[i], &packet[i]) != HVD_OK)
+			return NHVD_ERROR_MSG("error during decoding"); //fail actually?
 	}
 
-	while( (frame = hvd_receive_frame(n->hardware_decoder, &error) ) != NULL )
+	while(1)
 	{
+		bool keep_working = false;
+
+		//receive data from all hardware decoders
+		for(int i=0;i<n->hardware_decoders_size;++i)
+		{
+			if(packet && !packet[i].size) //silently skip empty subframes
+				continue; //(e.g. different framerates/B frames)
+
+			if( (frame[i] = hvd_receive_frame(n->hardware_decoder[i], &error) ) != NULL )
+				keep_working = true;
+
+			if(error != NHVD_OK)
+				return NHVD_ERROR_MSG("error after decoding");
+		}
+
+		if(!keep_working)
+			break;
+
+		//the next calls to hvd_receive_frame will unref the current
+		//frames so we have to either consume set of frames or ref it
 		std::lock_guard<std::mutex> frame_guard(n->mutex);
 
-		av_frame_unref(n->frame);
-		av_frame_ref(n->frame, frame);
+		for(int i=0;i<n->hardware_decoders_size;++i)
+			if(frame[i])
+			{
+				av_frame_unref(n->frame[i]);
+				av_frame_ref(n->frame[i], frame[i]);
+			}
 
-		if(n->hardware_unprojector)
-			if(nhvd_unproject_depth_frame(n) != NHVD_OK)
+		if(n->hardware_unprojector && frame[0])
+			if(nhvd_unproject_depth_frame(n, n->frame[0], n->frame[1]) != NHVD_OK)
 				return NHVD_ERROR;
-	}
-
-	if(error != HVD_OK)
-	{
-		cerr << "nhvd: error after decoding"<< endl;
-		return NHVD_ERROR;
 	}
 
 	return NHVD_OK;
 }
 
-static int nhvd_unproject_depth_frame(nhvd *n)
+static int nhvd_unproject_depth_frame(nhvd *n, const AVFrame *depth_frame, const AVFrame *texture_frame)
 {
-		if(n->frame->linesize[0] / n->frame->width != 2)
-		{  //this sanity check is not perfect, we may still get 16 bit data with some strange format
-			cerr << "nhvd_unproject_depth_frame expects uint16 data" <<
-			", got pixel format " << n->frame->format << " (expected p010le)"<< endl;
-			return NHVD_ERROR;
-		}
+	if(depth_frame->linesize[0] / depth_frame->width != 2 ||
+		(depth_frame->format != AV_PIX_FMT_P010LE && depth_frame->format != AV_PIX_FMT_P016LE))
+		return NHVD_ERROR_MSG("nhvd_unproject_depth_frame expects uint16 p010le/p016le data");
 
-		int size = n->frame->width * n->frame->height;
-		if(size != n->point_cloud.size)
-		{
-			delete [] n->point_cloud.data;
-			delete [] n->point_cloud.colors;
-			n->point_cloud.data = new float3[size];
-			n->point_cloud.colors = new color32[size];
-			n->point_cloud.size = size;
-			n->point_cloud.used = 0;
-		}
+	if(texture_frame && texture_frame->data[0] &&
+		texture_frame->format != AV_PIX_FMT_RGB0 && texture_frame->format != AV_PIX_FMT_RGBA)
+		return NHVD_ERROR_MSG("nhvd_unproject_depth_frame expects RGB0/RGBA texture data");
 
-		hdu_depth depth = {(uint16_t*)n->frame->data[0], (uint8_t*)n->frame->data[1], n->frame->width, n->frame->height, n->frame->linesize[0]};
-		//this could be moved to separate thread
-		hdu_unproject(n->hardware_unprojector, &depth, &n->point_cloud);
-		//zero out unused point cloud entries
-		memset(n->point_cloud.data + n->point_cloud.used, 0, (n->point_cloud.size-n->point_cloud.used)*sizeof(n->point_cloud.data[0]));
-		memset(n->point_cloud.colors + n->point_cloud.used, 0, (n->point_cloud.size-n->point_cloud.used)*sizeof(n->point_cloud.colors[0]));
+	int size = depth_frame->width * depth_frame->height;
+	if(size != n->point_cloud.size)
+	{
+		delete [] n->point_cloud.data;
+		delete [] n->point_cloud.colors;
+		n->point_cloud.data = new float3[size];
+		n->point_cloud.colors = new color32[size];
+		n->point_cloud.size = size;
+		n->point_cloud.used = 0;
+	}
 
-		return NHVD_OK;
+	uint16_t *depth_data = (uint16_t*)depth_frame->data[0];
+	//texture data is optional
+	uint32_t *texture_data = texture_frame ? (uint32_t*)texture_frame->data[0] : NULL;
+	int texture_linesize = texture_frame ? texture_frame->linesize[0] : 0;
+
+	hdu_depth depth = {depth_data, texture_data, depth_frame->width, depth_frame->height,
+		depth_frame->linesize[0], texture_linesize};
+	//this could be moved to separate thread
+	hdu_unproject(n->hardware_unprojector, &depth, &n->point_cloud);
+	//zero out unused point cloud entries
+	memset(n->point_cloud.data + n->point_cloud.used, 0, (n->point_cloud.size-n->point_cloud.used)*sizeof(n->point_cloud.data[0]));
+	memset(n->point_cloud.colors + n->point_cloud.used, 0, (n->point_cloud.size-n->point_cloud.used)*sizeof(n->point_cloud.colors[0]));
+
+	return NHVD_OK;
 }
 
 //NULL if there is no fresh data, non NULL otherwise
@@ -206,21 +253,29 @@ int nhvd_get_begin(nhvd *n, nhvd_frame *frame, nhvd_point_cloud *pc)
 
 	n->mutex.lock();
 
-	//for user convinience, return ERROR if there is no data
-	if(n->frame->data[0] == NULL)
+	bool new_data = false;
+
+	for(int i=0;i<n->hardware_decoders_size;++i)
+		if(n->frame[i]->data[0] != NULL)
+			new_data = true;
+
+	//for user convinience, return ERROR if there is no new data
+	if(!new_data)
 		return NHVD_ERROR;
 
 	if(frame)
-	{
-		frame->width = n->frame->width;
-		frame->height = n->frame->height;
-		frame->format = n->frame->format;
+		for(int i=0;i<n->hardware_decoders_size;++i)
+		{
+			frame[i].width = n->frame[i]->width;
+			frame[i].height = n->frame[i]->height;
+			frame[i].format = n->frame[i]->format;
 
-		//copy just a few ints and pointers, not the actual data
-		memcpy(frame->linesize, n->frame->linesize, sizeof(frame->linesize));
-		memcpy(frame->data, n->frame->data, sizeof(frame->data));
-	}
+			//copy just a few ints and pointers, not the actual data
+			memcpy(frame[i].linesize, n->frame[i]->linesize, sizeof(frame[i].linesize));
+			memcpy(frame[i].data, n->frame[i]->data, sizeof(frame[i].data));
+		}
 
+	//future -consider only updating if updated frame[0] or other way
 	if(pc && n->hardware_unprojector)
 	{
 		//copy just two pointers and ints
@@ -239,7 +294,8 @@ int nhvd_get_end(struct nhvd *n)
 	if(n == NULL)
 		return NHVD_ERROR;
 
-	av_frame_unref(n->frame);
+	for(int i=0;i<n->hardware_decoders_size;++i)
+		av_frame_unref(n->frame[i]);
 
 	n->mutex.unlock();
 
@@ -266,14 +322,18 @@ int nhvd_get_point_cloud_end(nhvd *n)
 	return nhvd_get_end(n);
 }
 
-static nhvd *nhvd_close_and_return_null(nhvd *n)
+static nhvd *nhvd_close_and_return_null(nhvd *n, const char *msg)
 {
+	if(msg)
+		cerr << "nhvd: " << msg << endl;
+
 	nhvd_close(n);
+
 	return NULL;
 }
 
 void nhvd_close(nhvd *n)
-{ //free mutex?
+{	//free mutex?
 	if(n == NULL)
 		return;
 
@@ -282,12 +342,22 @@ void nhvd_close(nhvd *n)
 		n->network_thread.join();
 
 	mlsp_close(n->network_streamer);
-	hvd_close(n->hardware_decoder);
+
+	for(int i=0;i<n->hardware_decoders_size;++i)
+	{
+		hvd_close(n->hardware_decoder[i]);
+		av_frame_free(&n->frame[i]);
+	}
+
 	hdu_close(n->hardware_unprojector);
 	delete [] n->point_cloud.data;
 	delete [] n->point_cloud.colors;
 
-	av_frame_free(&n->frame);
-
 	delete n;
+}
+
+static int NHVD_ERROR_MSG(const char *msg)
+{
+	cerr << "nhvd: " << msg << endl;
+	return NHVD_ERROR;
 }
