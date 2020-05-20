@@ -1,6 +1,6 @@
-# NHVD Network Hardware Video Decoder C++ library
+# NHVD Network Hardware Video Decoder C library
 
-Library for hardware video decoding from custom [MLSP](https://github.com/bmegli/minimal-latency-streaming-protocol) network protocol.
+Library for hardware video decoding and streaming over custom [MLSP](https://github.com/bmegli/minimal-latency-streaming-protocol) protocol.
 
 See also twin [NHVE](https://github.com/bmegli/network-hardware-video-encoder) network encoder.
 
@@ -10,10 +10,6 @@ The intent behind library:
 - minimize video latency
 - minimize CPU usage (hardware decoding and color conversions)
 - multi-frame streaming (e.g. depth + texture)
-- simple interface for interfacing from Unity
-
-Unity calls `Update` function once per frame, preparing data for rendering.
-If you have other workflow it may be difficult for you to use the library directly.
 
 ## Platforms 
 
@@ -63,7 +59,7 @@ sudo apt-get install git
 # clone the repository with *RECURSIVE* for submodules
 git clone --recursive https://github.com/bmegli/network-hardware-video-decoder.git
 
-# finally build the shared library
+# finally build the library
 cd network-hardware-video-decoder
 mkdir build
 cd build
@@ -82,7 +78,9 @@ Assuming:
 ### Receiving side
 
 ```bash
-./nhvd-receive-example 9766 vaapi h264 nv12 /dev/dri/renderD128
+./nhvd-frame-example 9766 vaapi h264 nv12 /dev/dri/renderD128
+# for multi-frame streaming
+#./nhvd-frame-multi-example 9766 vaapi h264 nv12 nv12 /dev/dri/renderD128
 ```
 
 ### Sending side
@@ -92,13 +90,15 @@ For a quick test you may use [NHVE](https://github.com/bmegli/network-hardware-v
 ```bash
 # assuming you build NHVE, in build directory
 ./nhve-stream-h264 127.0.0.1 9766 10 /dev/dri/renderD128
+# for multi frame streaming
+#./nhve-stream-multi 127.0.0.1 9766 10 /dev/dri/renderD128
 ```
 
 If you have Realsense camera you may use [realsense-network-hardware-video-encoder](https://github.com/bmegli/realsense-network-hardware-video-encoder).
 
 ```bash
 # assuming you build RNHVE, in build directory
-./realsense-nhve-h264 127.0.0.1 9766 color 640 360 30 10 /dev/dri/renderD128
+./realsense-nhve-h264 127.0.0.1 9766 infrared 640 360 30 10 /dev/dri/renderD128
 ```
 
 If everything went well you will:
@@ -114,42 +114,40 @@ See [HVD](https://github.com/bmegli/hardware-video-decoder) docs for details abo
 
 See examples directory for more complete examples.
 
-```C++
-	nhvd_hw_config hw_config= {"vaapi", "h264", "/dev/dri/renderD128", "bgr0"};
-	nhvd_net_config net_config= {NULL, 9765, 500};
+```C
+	struct nhvd_hw_config hw_config = {"vaapi", "h264", "/dev/dri/renderD128", "bgr0"};
+	struct nhvd_net_config net_config = {NULL, 9765, 500};
 
-	nhvd *network_decoder=nhvd_init(&net_config, &hw_config, 1, NULL);
+	struct nhvd *network_decoder = nhvd_init(&net_config, &hw_config, 1);
 
 	//this is where we will get the decoded data	
-	nhvd_frame frame;
+	AVFrame *frame;
+	int status;
 	
-	while(keep_working)
+	while( (status = nhvd_receive(network_decoder, &frame)) != NHVD_ERROR )
 	{
-		if( nhvd_get_frame_begin(network_decoder, &frame) == NHVD_OK )
-		{
-			//...
-			//do something with the:
-			// - frame.width
-			// - frame.height
-			// - frame.format
-			// - frame.data
-			// - frame.linesize
-			// be quick - we are holding the mutex
-			// Examples:
-			// - fill the texture
-			// - copy for later use if you can't be quick
-			//...
-		}
+		if(status == NHVD_TIMEOUT)
+			continue; //keep working
 
-		if( nhvd_get_frame_end(network_decoder) != NHVD_OK )
-			break; //error occured
-
-		//this should spin once per frame rendering
-		//so wait until we are after rendering
+		//do something with the:
+		// - frame->width
+		// - frame->height
+		// - frame->format
+		// - frame->data
+		// - frame->linesize
+		// - ...
+		
+		//immidiatelly consume, reference or copy frame data
 	}
 
 	nhvd_close(network_decoder);
 ```
+
+That's it! You have just seen all the functions and data types in the library.
+
+The same interface works for multi-frame streaming with:
+- array of hardware configurations in nhvd_init
+- array of frames in nhve_receive
 
 ## License
 

@@ -4,6 +4,3 @@
 [submodule "minimal-latency-streaming-protocol"]
 	path = minimal-latency-streaming-protocol
 	url = https://github.com/bmegli/minimal-latency-streaming-protocol.git
-[submodule "hardware-depth-unprojector"]
-	path = hardware-depth-unprojector
-	url = https://github.com/bmegli/hardware-depth-unprojector.git

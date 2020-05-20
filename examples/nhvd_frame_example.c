@@ -7,22 +7,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  *
- *
- * Note that NHVD was written for integration with Unity
- * - it assumes that engine checks just before rendering if new frame has arrived
- * - this example simulates such behaviour be sleeping frame time
- * - for those reason NHVD may not fit your workflow
  */
 
 #include "../nhvd.h"
 
-#include <iostream>
-#include <unistd.h> //usleep, note that this is not portable
+#include <stdio.h>
 
-using namespace std;
-
-void main_loop(nhvd *network_decoder);
-int process_user_input(int argc, char **argv, nhvd_hw_config *hw_config, nhvd_net_config *net_config);
+void main_loop(struct nhvd *network_decoder);
+int process_user_input(int argc, char **argv, struct nhvd_hw_config *hw_config, struct nhvd_net_config *net_config);
 
 //decoder configuration
 const char *HARDWARE=NULL; //input through CLI, e.g. "vaapi"
@@ -42,23 +34,19 @@ const char *IP=NULL; //listen on or NULL (listen on any)
 const uint16_t PORT=9766; //to be input through CLI
 const int TIMEOUT_MS=500; //timeout, accept new streaming sequence by receiver
 
-//we simpulate application rendering at framerate
-const int FRAMERATE = 30;
-const int SLEEP_US = 1000000/30;
-
 int main(int argc, char **argv)
 {
-	nhvd_hw_config hw_config= {HARDWARE, CODEC, DEVICE, PIXEL_FORMAT, WIDTH, HEIGHT, PROFILE};
-	nhvd_net_config net_config= {IP, PORT, TIMEOUT_MS};
+	struct nhvd_hw_config hw_config= {HARDWARE, CODEC, DEVICE, PIXEL_FORMAT, WIDTH, HEIGHT, PROFILE};
+	struct nhvd_net_config net_config= {IP, PORT, TIMEOUT_MS};
 
 	if(process_user_input(argc, argv, &hw_config, &net_config) != 0)
 		return 1;
 
-	nhvd *network_decoder = nhvd_init(&net_config, &hw_config, 1, NULL);
+	struct nhvd *network_decoder = nhvd_init(&net_config, &hw_config, 1);
 
 	if(!network_decoder)
 	{
-		cerr << "failed to initalize nhvd" << endl;
+		fprintf(stderr, "failed to initalize nhvd\n");
 		return 2;
 	}
 
@@ -68,43 +56,39 @@ int main(int argc, char **argv)
 	return 0;
 }
 
-void main_loop(nhvd *network_decoder)
+void main_loop(struct nhvd *network_decoder)
 {
-	//this is where we will get the decoded data
-	nhvd_frame frame;
+	AVFrame *frame;
+	int status;
 
-	bool keep_working=true;
-
-	while(keep_working)
+	while( (status = nhvd_receive(network_decoder, &frame)) != NHVD_ERROR )
 	{
-		if( nhvd_get_frame_begin(network_decoder, &frame) == NHVD_OK )
-		{
-			//...
-			//do something with the:
-			// - frame.width
-			// - frame.height
-			// - frame.format
-			// - frame.data
-			// - frame.linesize
-			// be quick - we are holding the mutex
-			// Examples:
-			// - fill the texture
-			// - copy for later use if you can't be quick
-			//...
-			cout << "decoded frame " << frame.width << "x" << frame.height << " format " << frame.format <<
-			" ls[0] " << frame.linesize[0] << " ls[1] " << frame.linesize[1]  << " ls[2]" << frame.linesize[2] << endl;
-		}
+		if(status == NHVD_TIMEOUT)
+			continue; //keep working
 
-		if( nhvd_get_frame_end(network_decoder) != NHVD_OK )
-			break; //error occured
+		//do something with the:
+		// - frame->width
+		// - frame->height
+		// - frame->format
+		// - frame->data
+		// - frame->linesize
+		// - ...
 
-		//this should spin once per frame rendering
-		//so wait until we are after rendering
-		usleep(SLEEP_US);
+		printf("decoded frame %dx%d format %d ls[0] %d ls[1] %d ls[2] %d\n",
+		frame->width, frame->height, frame->format,
+		frame->linesize[0], frame->linesize[1], frame->linesize[2]);
+
+		//The AVFrame* is valid until next loop iteration
+		//You should (one of):
+		//- consume the data immidiately
+		//- reference the frames with FFmpeg av_frame_ref (av_frame_unref)
+		//- copy the data (typically not recommended)
 	}
+
+	fprintf(stderr, "nhvd_receive failed!\n");
 }
 
-int process_user_input(int argc, char **argv, nhvd_hw_config *hw_config, nhvd_net_config *net_config)
+int process_user_input(int argc, char **argv, struct nhvd_hw_config *hw_config, struct nhvd_net_config *net_config)
 {
 	if(argc < 5)
 	{

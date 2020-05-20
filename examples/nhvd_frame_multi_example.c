@@ -7,25 +7,17 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  *
- *
- * Note that NHVD was written for integration with Unity
- * - it assumes that engine checks just before rendering if new frame has arrived
- * - this example simulates such behaviour be sleeping frame time
- * - for those reason NHVD may not fit your workflow
  */
 
 #include "../nhvd.h"
 
-#include <iostream>
-#include <unistd.h> //usleep, note that this is not portable
+#include <stdio.h>
 
-using namespace std;
-
-void main_loop(nhvd *network_decoder);
-int process_user_input(int argc, char **argv, nhvd_hw_config *hw_config, nhvd_net_config *net_config);
+void main_loop(struct nhvd *network_decoder);
+int process_user_input(int argc, char **argv, struct nhvd_hw_config *hw_config, struct nhvd_net_config *net_config);
 
 //number of hardware decoders
-const int HW_DECODERS = 2;
+#define HW_DECODERS 2
 
 //decoder configuration
 const char *HARDWARE=NULL; //input through CLI, e.g. "vaapi"
@@ -45,27 +37,23 @@ const char *IP=NULL; //listen on or NULL (listen on any)
 const uint16_t PORT=9766; //to be input through CLI
 const int TIMEOUT_MS=500; //timeout, accept new streaming sequence by receiver
 
-//we simpulate application rendering at framerate
-const int FRAMERATE = 30;
-const int SLEEP_US = 1000000/30;
-
 int main(int argc, char **argv)
 {
-	nhvd_hw_config hw_config[HW_DECODERS] = 
+	struct nhvd_hw_config hw_config[HW_DECODERS] =
 	{	//those could be completely different decoders using different hardware
 		{HARDWARE, CODEC, DEVICE, PIXEL_FORMAT, WIDTH, HEIGHT, PROFILE},
 		{HARDWARE, CODEC, DEVICE, PIXEL_FORMAT, WIDTH, HEIGHT, PROFILE}
 	};
-	nhvd_net_config net_config= {IP, PORT, TIMEOUT_MS};
+	struct nhvd_net_config net_config= {IP, PORT, TIMEOUT_MS};
 
 	if(process_user_input(argc, argv, hw_config, &net_config) != 0)
 		return 1;
 
-	nhvd *network_decoder = nhvd_init(&net_config, hw_config, HW_DECODERS, NULL);
+	struct nhvd *network_decoder = nhvd_init(&net_config, hw_config, HW_DECODERS);
 
 	if(!network_decoder)
 	{
-		cerr << "failed to initalize nhvd" << endl;
+		fprintf(stderr, "failed to initalize nhvd\n");
 		return 2;
 	}
 
@@ -75,47 +63,41 @@ int main(int argc, char **argv)
 	return 0;
 }
 
-void main_loop(nhvd *network_decoder)
+void main_loop(struct nhvd *network_decoder)
 {
-	//this is where we will get the decoded data
-	nhvd_frame frames[HW_DECODERS];
+	AVFrame *frames[HW_DECODERS];
+	int status;
 
-	bool keep_working=true;
-
-	while(keep_working)
+	while( (status = nhvd_receive(network_decoder, frames)) != NHVD_ERROR )
 	{
-		if( nhvd_get_frame_begin(network_decoder, frames) == NHVD_OK )
+		if(status == NHVD_TIMEOUT)
+			continue; //keep working
+
+		for(int i=0;i<HW_DECODERS;++i)
 		{
-			for(int i=0;i<HW_DECODERS;++i)
-			{
-			//...
 			//do something with array of frames:
-			// - frames[i].width
-			// - frame[i].height
-			// - frame[i].format
-			// - frame[i].data
-			// - frame[i].linesize
-			// be quick - we are holding the mutex
-			// Examples:
-			// - fill the texture
-			// - copy for later use if you can't be quick
+			// - frames[i]->width
+			// - frame[i]->height
+			// - frame[i]->format
+			// - frame[i]->data
+			// - frame[i]->linesize
 			//...
-			
-			cout << "decoded frame "  << i << " " << frames[i].width << "x" << frames[i].height << " format " << frames[i].format <<
-			" ls[0] " << frames[i].linesize[0] << " ls[1] " << frames[i].linesize[1]  << " ls[2]" << frames[i].linesize[2] << endl;			
-			}
+
+			printf("decoded frame %d %dx%d format %d ls[0] %d ls[1] %d ls[2] %d\n", i,
+			frames[i]->width, frames[i]->height, frames[i]->format,
+			frames[i]->linesize[0], frames[i]->linesize[1], frames[i]->linesize[2]);
+
+			//The AVFrame* set is valid until next loop iteration
+			//You should (one of):
+			//- consume the data immidiately
+			//- reference the frames with FFmpeg av_frame_ref (av_frame_unref)
+			//- copy the data (typically not recommended)
 		}
-
-		if( nhvd_get_frame_end(network_decoder) != NHVD_OK )
-			break; //error occured
-
-		//this should spin once per frame rendering
-		//so wait until we are after rendering
-		usleep(SLEEP_US);
 	}
+	fprintf(stderr, "nhvd_receive failed!\n");
 }
 
-int process_user_input(int argc, char **argv, nhvd_hw_config *hw_config, nhvd_net_config *net_config)
+int process_user_input(int argc, char **argv, struct nhvd_hw_config *hw_config, struct nhvd_net_config *net_config)
 {
 	if(argc < 6)
 	{
