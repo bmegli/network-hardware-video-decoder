@@ -18,6 +18,9 @@
 
 #include <stdio.h>
 
+//benchmark related
+#include <time.h> //clock_gettime
+
 static int nhvd_decode_frame(struct nhvd *n, struct hvd_packet* packet);
 static struct nhvd *nhvd_close_and_return_null(struct nhvd *n, const char *msg);
 static int NHVD_ERROR_MSG(const char *msg);
@@ -96,6 +99,9 @@ int nhvd_receive(struct nhvd *n, AVFrame *frames[])
 		return NHVD_ERROR_MSG("error while receiving frame");
 	}
 
+	struct timespec start, decode;
+	clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+
 	for(int i=0;i<n->hardware_decoders_size;++i)
 	{
 		packets[i].data=streamer_frame->data[i];
@@ -103,6 +109,12 @@ int nhvd_receive(struct nhvd *n, AVFrame *frames[])
 	}
 	if (nhvd_decode_frame(n, packets) != NHVD_OK)
 		return NHVD_ERROR;
+
+	clock_gettime(CLOCK_MONOTONIC_RAW, &decode);
+
+	double decode_ms = (decode.tv_nsec - start.tv_nsec) / 1000000.0;
+
+	printf("decoded in %f ms\n", decode_ms);
 
 	for(int i=0;i<n->hardware_decoders_size;++i)
 		frames[i] = n->frame[i];
