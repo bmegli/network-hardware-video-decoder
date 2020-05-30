@@ -126,7 +126,7 @@ See examples directory for more complete examples.
 	
 	while( (status = nhvd_receive(network_decoder, &frame)) != NHVD_ERROR )
 	{
-		if(status == NHVD_TIMEOUT)
+		if(status == NHVD_TIMEOUT || frame == NULL)
 			continue; //keep working
 
 		//do something with the:

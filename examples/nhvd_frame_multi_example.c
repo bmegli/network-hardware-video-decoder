@@ -75,6 +75,9 @@ void main_loop(struct nhvd *network_decoder)
 
 		for(int i=0;i<HW_DECODERS;++i)
 		{
+			if(frames[i] == NULL)
+				continue;
+
 			//do something with array of frames:
 			// - frames[i]->width
 			// - frame[i]->height

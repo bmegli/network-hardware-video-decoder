@@ -132,6 +132,10 @@ void nhvd_close(struct nhvd *n);
  * The number of frames in the set depends on hw_size argument passed to nhvd_init.
  * Typically this is just a single frame (hw_size == 1).
  *
+ * Note that this function may return NHVD_OK and NULL for some (or all) frames.
+ * This happens when library received frame(s) data but was unable to decode
+ * some of the frames yet (e.g. waiting for the keyframe).
+ *
  * The ownership of FFmpeg AVFrame* set remains with the library and
  * is valid only to the next call of nhvd_receive so:
  * - consume it immidiately
