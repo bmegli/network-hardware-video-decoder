@@ -37,11 +37,10 @@ struct nhvd *nhvd_init(
 	const struct nhvd_hw_config *hw_config, int hw_size)
 {
 	struct nhvd *n, zero_nhvd = {0};
-	struct mlsp_config mlsp_cfg={net_config->ip, net_config->port, net_config->timeout_ms};
+	struct mlsp_config mlsp_cfg={net_config->ip, net_config->port, net_config->timeout_ms, hw_size};
 
 	if(hw_size > NHVD_MAX_DECODERS)
 		return nhvd_close_and_return_null(NULL, "the maximum number of decoders (compile time) exceeded");
-
 
 	if( ( n = (struct nhvd*)malloc(sizeof(struct nhvd))) == NULL )
 		return nhvd_close_and_return_null(NULL, "not enough memory for nhvd");
@@ -81,7 +80,7 @@ void nhvd_close(struct nhvd *n)
 int nhvd_receive(struct nhvd *n, AVFrame *frames[])
 {
 	struct hvd_packet packets[NHVD_MAX_DECODERS] = {0};
-	struct mlsp_frame *streamer_frame;
+	const struct mlsp_frame *streamer_frame;
 	int error;
 
 	if( (streamer_frame = mlsp_receive(n->network_streamer, &error)) == NULL)
@@ -89,7 +88,6 @@ int nhvd_receive(struct nhvd *n, AVFrame *frames[])
 		if(error == MLSP_TIMEOUT)
 		{
 			fprintf(stderr, ".");
-			mlsp_receive_reset(n->network_streamer);
 			nhvd_decode_frame(n, NULL);
 			return NHVD_TIMEOUT;
 		}
@@ -98,8 +96,8 @@ int nhvd_receive(struct nhvd *n, AVFrame *frames[])
 
 	for(int i=0;i<n->hardware_decoders_size;++i)
 	{
-		packets[i].data=streamer_frame->data[i];
-		packets[i].size=streamer_frame->size[i];
+		packets[i].data = streamer_frame[i].data;
+		packets[i].size = streamer_frame[i].size;
 	}
 	if (nhvd_decode_frame(n, packets) != NHVD_OK)
 		return NHVD_ERROR;
@@ -140,7 +138,7 @@ static int nhvd_decode_frame(struct nhvd *n, struct hvd_packet *packet)
 			continue; //(e.g. different framerates/B frames)
 
 		//non NULL packet - get single frame
-		//NULL packet (flush request) - flush the decoder
+		//NULL packet - flush the decoder, work until hardware is flushed
 		do
 			n->frame[i] = hvd_receive_frame(n->hardware_decoder[i], &error);
 		while(!packet && n->frame[i]);
