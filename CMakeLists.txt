@@ -22,6 +22,9 @@ target_link_libraries(nhvd hvd mlsp)
 add_executable(nhvd-frame-example examples/nhvd_frame_example.c)
 target_link_libraries(nhvd-frame-example nhvd)
 
+add_executable(nhvd-frame-raw-example examples/nhvd_frame_raw_example.c)
+target_link_libraries(nhvd-frame-raw-example nhvd)
+
 add_executable(nhvd-frame-multi-example examples/nhvd_frame_multi_example.c)
 target_link_libraries(nhvd-frame-multi-example nhvd)
 

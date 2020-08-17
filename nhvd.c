@@ -79,6 +79,11 @@ void nhvd_close(struct nhvd *n)
 
 int nhvd_receive(struct nhvd *n, AVFrame *frames[])
 {
+	return nhvd_receive_all(n, frames, NULL);
+}
+
+int nhvd_receive_all(struct nhvd *n, AVFrame *frames[], struct nhvd_frame *raws)
+{
 	struct hvd_packet packets[NHVD_MAX_DECODERS] = {0};
 	const struct mlsp_frame *streamer_frame;
 	int error;
@@ -98,6 +103,12 @@ int nhvd_receive(struct nhvd *n, AVFrame *frames[])
 	{
 		packets[i].data = streamer_frame[i].data;
 		packets[i].size = streamer_frame[i].size;
+
+		if(raws)
+		{
+			raws[i].data = streamer_frame[i].data;
+			raws[i].size = streamer_frame[i].size;
+		}
 	}
 	if (nhvd_decode_frame(n, packets) != NHVD_OK)
 		return NHVD_ERROR;

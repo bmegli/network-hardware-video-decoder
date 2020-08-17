@@ -87,6 +87,20 @@ struct nhvd_hw_config
 };
 
 /**
+ * @struct nhvd_frame
+ * @brief Raw received data frame
+ *
+ * Raw data returned along decoded data (nhvd_receive_all).
+ *
+ * @see nhvd_receive_all
+ */
+struct nhvd_frame
+{
+	uint8_t *data; //!< pointer to encoded data
+	int size; //!< size of encoded data
+};
+
+/**
   * @brief Constants returned by most of library functions
   */
 enum nhvd_retval_enum
@@ -158,13 +172,53 @@ void nhvd_close(struct nhvd *n);
  *
  * @see nhvd_init
  *
- * Example:
- * @code
- *
- * @endcode
  *
  */
 int nhvd_receive(struct nhvd *n, AVFrame *frames[]);
+
+/**
+ * @brief Receive next set of frames with both decoded and encoded data
+ *
+ * Function blocks until next set of frames is received and decoded or timeout occurs.
+ * The number of frames in the set depends on hw_size argument passed to nhvd_init.
+ * Typically this is just a single frame (hw_size == 1).
+ *
+ * Note that this function may return NHVD_OK and NULL for some (or all) frames.
+ * This happens when library received frame(s) data but was unable to decode
+ * some of the frames yet (e.g. waiting for the keyframe).
+ *
+ * The ownership of FFmpeg AVFrame* set remains with the library and
+ * is valid only until next call to nhvd_receive so:
+ * - consume it immidiately
+ * - or reference the data with av_frame_ref
+ * - or copy (not recommended)
+ *
+ * The ownership of nhvd_frame set data remains with the library and
+ * is valid only until next call to nhvd_recive so:
+ * - consume it immidiately
+ * - or copy (not recommended)
+ *
+ * For AVFrame you are mainly interested in its data and linesize arrays.
+ *
+ * If the function returns NHVD_TIMEOUT you may immidiately proceed with
+ * next nhvd_receive. The hardware is flushed and network prepared for new
+ * streaming sequence.
+ *
+ *
+ * @param n pointer to internal library data
+ * @param frames array of AVFrame* of size matching nhvd_init hw_size
+ * @param raws array of nhvd_frame of size matching nhvd_init hw_size
+ * @return
+ * - NHVD_OK on success
+ * - NHVD_ERROR on error
+ * - NHVD_TIMEOUT on receive timeout
+ *
+ * @see nhvd_init
+ *
+ *
+ */
+int nhvd_receive_all(struct nhvd *n, AVFrame *frames[], struct nhvd_frame *raws);
+
 
 /** @}*/
 

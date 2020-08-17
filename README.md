@@ -79,6 +79,8 @@ Assuming:
 
 ```bash
 ./nhvd-frame-example 9766 vaapi h264 nv12 /dev/dri/renderD128
+# for decoding and dumping raw (encoded) data to file
+#./nhvd-frame-raw-example 9766 vaapi h264 nv12 /dev/dri/renderD128
 # for multi-frame streaming
 #./nhvd-frame-multi-example 9766 vaapi h264 nv12 nv12 /dev/dri/renderD128
 ```
@@ -143,11 +145,13 @@ See examples directory for more complete examples.
 	nhvd_close(network_decoder);
 ```
 
-That's it! You have just seen all the functions and data types in the library.
+That's it!
 
 The same interface works for multi-frame streaming with:
 - array of hardware configurations in nhvd_init
 - array of frames in nhve_receive
+
+With `nhvd_receive_all` you may get both decoded and encoded data.
 
 ## License
 
