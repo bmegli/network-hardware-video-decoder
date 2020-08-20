@@ -42,7 +42,7 @@ int main(int argc, char **argv)
 	if(process_user_input(argc, argv, &hw_config, &net_config) != 0)
 		return 1;
 
-	struct nhvd *network_decoder = nhvd_init(&net_config, &hw_config, 1);
+	struct nhvd *network_decoder = nhvd_init(&net_config, &hw_config, 1, 0);
 
 	if(!network_decoder)
 	{

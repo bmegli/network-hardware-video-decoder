@@ -10,6 +10,8 @@ The intent behind library:
 - minimize video latency
 - minimize CPU usage (hardware decoding and color conversions)
 - multi-frame streaming (e.g. depth + texture)
+- auxiliary data channels (e.g. IMU, odometry, metadata)
+- simple user interface
 
 ## Platforms 
 
@@ -83,6 +85,8 @@ Assuming:
 #./nhvd-frame-raw-example 9766 vaapi h264 nv12 /dev/dri/renderD128
 # for multi-frame streaming
 #./nhvd-frame-multi-example 9766 vaapi h264 nv12 nv12 /dev/dri/renderD128
+# for video + auxiliary channel (non-video)
+#./nhvd-frame-aux-example 9766 vaapi h264 nv12 /dev/dri/renderD128
 ```
 
 ### Sending side
@@ -94,6 +98,8 @@ For a quick test you may use [NHVE](https://github.com/bmegli/network-hardware-v
 ./nhve-stream-h264 127.0.0.1 9766 10 /dev/dri/renderD128
 # for multi frame streaming
 #./nhve-stream-multi 127.0.0.1 9766 10 /dev/dri/renderD128
+# for video + auxiliary channel (non-video)
+#./nhve-stream-h264-aux 127.0.0.1 9766 10 /dev/dri/renderD128
 ```
 
 If you have Realsense camera you may use [realsense-network-hardware-video-encoder](https://github.com/bmegli/realsense-network-hardware-video-encoder).
@@ -120,7 +126,7 @@ See examples directory for more complete examples.
 	struct nhvd_hw_config hw_config = {"vaapi", "h264", "/dev/dri/renderD128", "bgr0"};
 	struct nhvd_net_config net_config = {NULL, 9765, 500};
 
-	struct nhvd *network_decoder = nhvd_init(&net_config, &hw_config, 1);
+	struct nhvd *network_decoder = nhvd_init(&net_config, &hw_config, 1, 0);
 
 	//this is where we will get the decoded data	
 	AVFrame *frame;
@@ -148,10 +154,12 @@ See examples directory for more complete examples.
 That's it!
 
 The same interface works for multi-frame streaming with:
-- array of hardware configurations in nhvd_init
-- array of frames in nhve_receive
+- array of hardware configurations in `nhvd_init`
+- array of frames in `nhvd_receive`
 
-With `nhvd_receive_all` you may get both decoded and encoded data.
+With `nhvd_receive_all` you may:
+- get both decoded and encoded data.
+- use `nhvd_init` with `aux_size > 0` for non-video data channels
 
 ## License
 

@@ -113,11 +113,13 @@ enum nhvd_retval_enum
 /**
  * @brief Initialize internal library data.
  *
- * Initialize streaming and single or multiple (hw_size > 1) hardware decoders.
+ * Initialize streaming and single or multiple (hw_size > 1) hardware decoders
+ * and (aux_size > 1) auxiliary non-video raw data channels.
  *
  * @param net_config network configuration
  * @param hw_config hardware decoders configuration of hw_size size
  * @param hw_size number of supplied hardware decoder configurations
+ * @param aux_size number of auxiliary non-video raw data channels
  * @return
  * - pointer to internal library data
  * - NULL on error, errors printed to stderr
@@ -126,7 +128,7 @@ enum nhvd_retval_enum
  */
 struct nhvd *nhvd_init(
 	const struct nhvd_net_config *net_config,
-	const struct nhvd_hw_config *hw_config, int hw_size);
+	const struct nhvd_hw_config *hw_config, int hw_size, int aux_size);
 
 /**
  * @brief Free library resources
@@ -193,28 +195,33 @@ int nhvd_receive(struct nhvd *n, AVFrame *frames[]);
  * - or reference the data with av_frame_ref
  * - or copy (not recommended)
  *
- * The ownership of nhvd_frame set data remains with the library and
+ * For AVFrame you are mainly interested in its data and linesize arrays.
+ *
+ * The number of raws in the set depends on hw_size + aux_size passed to nhvd_init.
+ * Auxiliary channels follow video channels.
+ * Typically there are no auxiliary channels (aux_size == 0).
+ *
+ * Note that it is possible to get auxiliary nvhd_frame with 0 size
+ * if that is what the sender decided to send (e.g. missing aux data for some frames).
+ *
+ * The ownership of raws nhvd_frame set data remains with the library and
  * is valid only until next call to nhvd_recive so:
  * - consume it immidiately
- * - or copy (not recommended)
- *
- * For AVFrame you are mainly interested in its data and linesize arrays.
+ * - or copy if necessary
  *
  * If the function returns NHVD_TIMEOUT you may immidiately proceed with
  * next nhvd_receive. The hardware is flushed and network prepared for new
  * streaming sequence.
  *
- *
  * @param n pointer to internal library data
  * @param frames array of AVFrame* of size matching nhvd_init hw_size
- * @param raws array of nhvd_frame of size matching nhvd_init hw_size
+ * @param raws array of nhvd_frame of size matching nhvd_init hw_size + aux_size
  * @return
  * - NHVD_OK on success
  * - NHVD_ERROR on error
  * - NHVD_TIMEOUT on receive timeout
  *
  * @see nhvd_init
- *
  *
  */
 int nhvd_receive_all(struct nhvd *n, AVFrame *frames[], struct nhvd_frame *raws);

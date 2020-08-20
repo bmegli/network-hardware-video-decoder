@@ -28,16 +28,17 @@ struct nhvd
 
 	struct hvd *hardware_decoder[NHVD_MAX_DECODERS];
 	int hardware_decoders_size;
+	int auxiliary_channels_size;
 
 	AVFrame *frame[NHVD_MAX_DECODERS];
 };
 
 struct nhvd *nhvd_init(
 	const struct nhvd_net_config *net_config,
-	const struct nhvd_hw_config *hw_config, int hw_size)
+	const struct nhvd_hw_config *hw_config, int hw_size, int aux_size)
 {
 	struct nhvd *n, zero_nhvd = {0};
-	struct mlsp_config mlsp_cfg={net_config->ip, net_config->port, net_config->timeout_ms, hw_size};
+	struct mlsp_config mlsp_cfg={net_config->ip, net_config->port, net_config->timeout_ms, hw_size + aux_size};
 
 	if(hw_size > NHVD_MAX_DECODERS)
 		return nhvd_close_and_return_null(NULL, "the maximum number of decoders (compile time) exceeded");
@@ -51,6 +52,7 @@ struct nhvd *nhvd_init(
 		return nhvd_close_and_return_null(n, "failed to initialize network server");
 
 	n->hardware_decoders_size = hw_size;
+	n->auxiliary_channels_size = aux_size;
 
 	for(int i=0;i<hw_size;++i)
 	{
@@ -103,18 +105,20 @@ int nhvd_receive_all(struct nhvd *n, AVFrame *frames[], struct nhvd_frame *raws)
 	{
 		packets[i].data = streamer_frame[i].data;
 		packets[i].size = streamer_frame[i].size;
-
-		if(raws)
-		{
-			raws[i].data = streamer_frame[i].data;
-			raws[i].size = streamer_frame[i].size;
-		}
 	}
+
 	if (nhvd_decode_frame(n, packets) != NHVD_OK)
 		return NHVD_ERROR;
 
 	for(int i=0;i<n->hardware_decoders_size;++i)
 		frames[i] = n->frame[i];
+
+	if(raws)
+		for(int i=0;i < n->hardware_decoders_size + n->auxiliary_channels_size;++i)
+		{
+			raws[i].data = streamer_frame[i].data;
+			raws[i].size = streamer_frame[i].size;
+		}
 
 	return NHVD_OK;
 }

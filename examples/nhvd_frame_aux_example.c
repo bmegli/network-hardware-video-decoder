@@ -7,12 +7,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  *
- * This example retrieves both decoded and encoeded data:
+ * This example retrieves both decoded and auxiliary (non-video) data:
  * - decoded data is consumed (frame stats printed)
- * - encoded data is stored to disk (e.g as raw H.264)
- *
- * After finishing play received raw with:
- * ffplay output
+ * - auxiliary data is printed to console
  *
  */
 
@@ -20,7 +17,7 @@
 
 #include <stdio.h>
 
-void main_loop(struct nhvd *network_decoder, FILE *output_file);
+void main_loop(struct nhvd *network_decoder);
 int process_user_input(int argc, char **argv, struct nhvd_hw_config *hw_config, struct nhvd_net_config *net_config);
 
 //decoder configuration
@@ -49,20 +46,11 @@ int main(int argc, char **argv)
 	if(process_user_input(argc, argv, &hw_config, &net_config) != 0)
 		return 1;
 
-	//prepare file for raw encoded output
-	FILE *output_file = fopen("output", "w+b");
-
-	if(output_file == NULL)
-	{
-		fprintf(stderr, "unable to open file for output\n");
-		return 3;
-	}
-
-	struct nhvd *network_decoder = nhvd_init(&net_config, &hw_config, 1, 0);
+	//initialize for 1 video channel and 1 auxiliary channel
+	struct nhvd *network_decoder = nhvd_init(&net_config, &hw_config, 1, 1);
 
 	if(!network_decoder)
 	{
-		fclose(output_file);
 		fprintf(stderr, "failed to initalize nhvd\n");
 		return 2;
 	}
@@ -70,46 +58,34 @@ int main(int argc, char **argv)
 	printf("After finishing play received raw with:\n");
 	printf("ffplay output\n");
 
-	main_loop(network_decoder, output_file);
+	main_loop(network_decoder);
 
 	nhvd_close(network_decoder);
-	fclose(output_file);
 
 	return 0;
 }
 
-void main_loop(struct nhvd *network_decoder, FILE *output_file)
+void main_loop(struct nhvd *network_decoder)
 {
 	AVFrame *frame;
-	struct nhvd_frame raw;
+	struct nhvd_frame raw[2] = {0}; //first for video, second for aux
 
 	int status;
 
-	while( (status = nhvd_receive_all(network_decoder, &frame, &raw)) != NHVD_ERROR )
+	while( (status = nhvd_receive_all(network_decoder, &frame, raw)) != NHVD_ERROR )
 	{
 		if(status == NHVD_TIMEOUT || frame == NULL)
-		{
-			//for simplicty we flush the file on timeout
-			//which likely indicates end of stream
-			//this will give as correct result in case of ctrl+c
-			fflush(output_file); //return value ignored for simplicity
 			continue; //keep working
-		}
 
 		//handle decoded data
 		printf("decoded frame %dx%d format %d ls[0] %d ls[1] %d ls[2] %d\n",
 		frame->width, frame->height, frame->format,
 		frame->linesize[0], frame->linesize[1], frame->linesize[2]);
 
-		//handle encoded data
-
-		//raw.data is encoded video frame of raw.size length
-		//here we are dumping it to file as example
-		//yes, we ignore the return value of fwrite for simplicty
-		//it could also fail in harsh real world...
-		size_t written = fwrite(raw.data, 1, raw.size, output_file);
-
-		printf("wrote bytes: %zu\n", written);
+		//handle auxiliary data
+		//assuming '\0' terminated string, would be dangerous in real world
+		if(raw[1].size) //sender could decide to send empty frame
+			printf("%s\n", raw[1].data);
 
 		//The nhvd_frame data is valid only until next loop iteration
 		//You should consume immidately or copy
