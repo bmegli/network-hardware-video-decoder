@@ -55,9 +55,6 @@ int main(int argc, char **argv)
 		return 2;
 	}
 
-	printf("After finishing play received raw with:\n");
-	printf("ffplay output\n");
-
 	main_loop(network_decoder);
 
 	nhvd_close(network_decoder);
